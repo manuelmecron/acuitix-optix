@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Calibration & Navigation</title>
+    <title>Acuitix Optix - Calibration Étalon 11 & JSON</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
@@ -29,55 +29,24 @@
 
         #control-panel {
             position: absolute; bottom: 80px; width: 100%; display: none;
-            justify-content: space-around; align-items: center; padding: 0 10px; z-index: 25; pointer-events: none;
+            justify-content: center; gap: 15px; align-items: center; padding: 0 10px; z-index: 25; pointer-events: none;
         }
         .interactive-ui { pointer-events: auto; touch-action: auto; }
 
-        /* Blocs HTML interactifs pour les coins (Glissables au doigt) */
-        .corner-box {
-            position: absolute; width: 50px; height: 50px; border: 2px solid #333;
-            font-weight: bold; font-size: 13px; display: none; align-items: center; justify-content: center;
+        .central-marker {
+            position: absolute; width: 50px; height: 50px; border: 2px dashed #ff00ff;
+            background: rgba(255, 235, 59, 0.4); color: black; font-weight: bold; font-size: 11px;
+            display: none; align-items: center; justify-content: center;
             cursor: pointer; z-index: 26; box-shadow: 0 2px 6px rgba(0,0,0,0.5); user-select: none;
-            touch-action: none; border-radius: 6px;
+            touch-action: none; border-radius: 4px;
         }
-        #box-sg { background: #ffeb3b; color: black; }
-        #box-sd { background: #ffeb3b; color: black; }
-        #box-id { background: #ffeb3b; color: black; }
-        #box-ig { background: #ffeb3b; color: black; }
+        #marker-left { background: rgba(255, 235, 59, 0.7); }
+        #marker-right { background: rgba(255, 235, 59, 0.7); }
 
-        /* D-Pad Coins */
-        .dpad {
-            position: relative; width: 100px; height: 100px; background: rgba(50,50,50,0.85);
-            border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        }
-        .dpad button {
-            position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer; touch-action: auto;
-        }
-        .dpad-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
-        .dpad-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
-        .dpad-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
-        .dpad-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
-        .dpad-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; touch-action: auto; }
-
-        /* Panneau de navigation 4 axes (PAN) */
-        .pan-pad {
-            position: relative; width: 100px; height: 100px; background: rgba(30,30,50,0.85);
-            border-radius: 50%; border: 2px solid #55a; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        }
-        .pan-pad button {
-            position: absolute; background: #335; color: white; border: 1px solid #668; font-weight: bold; cursor: pointer; touch-action: auto;
-        }
-        .pan-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
-        .pan-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
-        .pan-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
-        .pan-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
-        .pan-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #17a2b8; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; touch-action: auto; }
-
-        .tools-group { display: flex; flex-direction: column; gap: 5px; }
-        .tool-row { display: flex; gap: 5px; }
+        .tools-group { display: flex; gap: 10px; }
         .tool-btn {
             background: rgba(30,30,30,0.9); color: white; border: 1px solid #777;
-            padding: 6px 8px; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer;
+            padding: 10px 14px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.4); touch-action: auto;
         }
 
@@ -108,43 +77,16 @@
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <div id="status-msg">Étape 1 : Prenez la photo martyr guidé par l'axe X</div>
+    <div id="status-msg">Étape 1 : Prenez la photo martyr alignée sur l'axe X</div>
 
-    <!-- Blocs HTML interactifs glissables pour les 4 coins -->
-    <div class="corner-box" id="box-sg">SG</div>
-    <div class="corner-box" id="box-sd">SD</div>
-    <div class="corner-box" id="box-id">ID</div>
-    <div class="corner-box" id="box-ig">IG</div>
+    <div class="central-marker" id="marker-left">C-G</div>
+    <div class="central-marker" id="marker-right">C-D</div>
 
     <div id="control-panel">
-        <!-- Groupe Outils (Zoom / Échelle) -->
         <div class="tools-group interactive-ui">
-            <div class="tool-row">
-                <button class="tool-btn" id="zoom-plus">Zoom +</button>
-                <button class="tool-btn" id="zoom-minus">Zoom -</button>
-            </div>
-            <div class="tool-row">
-                <button class="tool-btn" id="scale-plus">Échelle +</button>
-                <button class="tool-btn" id="scale-minus">Échelle -</button>
-            </div>
-        </div>
-
-        <!-- Pad de Navigation 4 axes (PAN) -->
-        <div class="pan-pad interactive-ui">
-            <button class="pan-up" id="pan-up">▲</button>
-            <button class="pan-down" id="pan-down">▼</button>
-            <button class="pan-left" id="pan-left">◀</button>
-            <button class="pan-right" id="pan-right">▶</button>
-            <div class="pan-center">PAN</div>
-        </div>
-
-        <!-- D-Pad Déplacement des coins (SG, SD, ID, IG) -->
-        <div class="dpad interactive-ui">
-            <button class="dpad-up" id="dpad-up">▲</button>
-            <button class="dpad-down" id="dpad-down">▼</button>
-            <button class="dpad-left" id="dpad-left">◀</button>
-            <button class="dpad-right" id="dpad-right">▶</button>
-            <button class="dpad-center" id="dpad-center">SG</button>
+            <button class="tool-btn" id="zoom-plus">🔍 Zoom +</button>
+            <button class="tool-btn" id="zoom-minus">🔍 Zoom -</button>
+            <button class="tool-btn" id="reset-view" style="background: #555;">🔄 Centrer</button>
         </div>
     </div>
 
@@ -153,7 +95,7 @@
         <div class="modal-actions">
             <button id="dl-with-layers">💾 Télécharger avec calques</button>
             <button id="dl-original" class="secondary">📥 Télécharger originale</button>
-            <button id="share-btn" class="secondary">📤 Partager</button>
+            <button id="dl-json" style="background: #17a2b8;">📋 Télécharger JSON</button>
             <button id="close-preview" style="background: #dc3545;">❌ Fermer</button>
         </div>
     </div>
@@ -168,6 +110,13 @@
     </div>
 
     <script>
+        // --- COTES OFFICIELLES DE L'ÉTALON 11 ---
+        // Modifiez ces multiplicateurs ou valeurs fixes selon les dimensions exactes de votre plan
+        const ETALON_SPECS = {
+            widthRatioFromCenters: 1.6, // Rapport entre la largeur totale de l'étalon et l'entraxe mesuré C_G / C_D
+            heightRatioFromCenters: 0.9 // Rapport de hauteur totale par rapport à l'entraxe
+        };
+
         let video = document.getElementById('videoInput');
         let canvas = document.getElementById('canvasOutput');
         let ctx = canvas.getContext('2d');
@@ -177,7 +126,6 @@
         let btnRight = document.getElementById('btn-right');
         let controlPanel = document.getElementById('control-panel');
         let warningScreen = document.getElementById('landscape-warning');
-        let centerDpadBtn = document.getElementById('dpad-center');
 
         let previewModal = document.getElementById('preview-modal');
         let previewCanvas = document.getElementById('preview-canvas');
@@ -186,9 +134,12 @@
         let martyrImage = null;
         let streaming = false;
 
-        let corners = [];
-        let activeCornerIndex = 0; 
-        const cornerNames = ['SG', 'SD', 'ID', 'IG'];
+        let calibrationConfig = {
+            specs: ETALON_SPECS,
+            centerLeft: { x: 0, y: 0 },
+            centerRight: { x: 0, y: 0 },
+            corners: [] 
+        };
 
         let zoomLevel = 1.0;
         let panX = 0;
@@ -214,31 +165,57 @@
             }
         }
 
-        function initDefaultCorners(w, h) {
-            let savedConfig = localStorage.getItem('acuitix_config');
-            if (savedConfig) {
+        function initDefaultMarkers(w, h) {
+            let saved = localStorage.getItem('acuitix_etalon11_json');
+            if (saved) {
                 try {
-                    let parsed = JSON.parse(savedConfig);
-                    if (Array.isArray(parsed) && parsed.length === 4) {
-                        let valid = parsed.every(p => typeof p.x === 'number' && typeof p.y === 'number' && p.x >= 0 && p.x <= w * 2 && p.y >= 0 && p.y <= h * 2);
-                        if (valid) {
-                            corners = parsed;
-                            return;
-                        }
+                    let parsed = JSON.parse(saved);
+                    if (parsed && parsed.centerLeft && parsed.centerRight) {
+                        calibrationConfig = parsed;
+                        return;
                     }
-                } catch(e) { console.error("Erreur lecture JSON config"); }
+                } catch(e) { console.error("Erreur lecture JSON"); }
             }
 
-            // Centrage parfait aligné sur l'axe X (au milieu de l'écran)
-            let bw = w * 0.5;
-            let bh = h * 0.3;
-            let cx = w / 2;
             let cy = h / 2;
-            corners = [
-                {x: cx - bw/2, y: cy - bh/2}, // 0: SG
-                {x: cx + bw/2, y: cy - bh/2}, // 1: SD
-                {x: cx + bw/2, y: cy + bh/2}, // 2: ID
-                {x: cx - bw/2, y: cy + bh/2}  // 3: IG
+            calibrationConfig.centerLeft = { x: w * 0.35, y: cy };
+            calibrationConfig.centerRight = { x: w * 0.65, y: cy };
+            updateCornersFromCenters();
+        }
+
+        function updateCornersFromCenters() {
+            let cl = calibrationConfig.centerLeft;
+            let cr = calibrationConfig.centerRight;
+            
+            let dx = cr.x - cl.x;
+            let dy = cr.y - cl.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            let angle = Math.atan2(dy, dx);
+
+            // Application rigoureuse des cotes de l'Étalon 11
+            let frameWidth = distance * ETALON_SPECS.widthRatioFromCenters; 
+            let frameHeight = distance * ETALON_SPECS.heightRatioFromCenters; 
+
+            let cx = (cl.x + cr.x) / 2;
+            let cy = (cl.y + cr.y) / 2;
+
+            let cos = Math.cos(angle);
+            let sin = Math.sin(angle);
+            let hw = frameWidth / 2;
+            let hh = frameHeight / 2;
+
+            function rot(localX, localY) {
+                return {
+                    x: cx + (localX * cos - localY * sin),
+                    y: cy + (localX * sin + localY * cos)
+                };
+            }
+
+            calibrationConfig.corners = [
+                rot(-hw, -hh), // SG
+                rot(hw, -hh),  // SD
+                rot(hw, hh),   // ID
+                rot(-hw, hh)   // IG
             ];
         }
 
@@ -247,7 +224,7 @@
                 video.srcObject = stream;
                 video.play();
                 streaming = true;
-                initDefaultCorners(window.innerWidth, window.innerHeight);
+                initDefaultMarkers(window.innerWidth, window.innerHeight);
                 requestAnimationFrame(mainLoop);
             })
             .catch(err => alert("Erreur caméra : " + err.message));
@@ -268,32 +245,23 @@
             ctx.drawImage(source, 0, 0, sw, sh, centerShiftX, centerShiftY, sw * ratio, sh * ratio);
         }
 
-        function updateCornerDOM() {
+        function updateMarkersDOM() {
             if (appState !== 'ADJUST_MARTYR') {
-                ['sg', 'sd', 'id', 'ig'].forEach(name => {
-                    document.getElementById('box-' + name).style.display = 'none';
-                });
+                document.getElementById('marker-left').style.display = 'none';
+                document.getElementById('marker-right').style.display = 'none';
                 return;
             }
 
-            corners.forEach((p, idx) => {
-                let screenX = (p.x - canvas.width / 2) * zoomLevel + canvas.width / 2 + panX;
-                let screenY = (p.y - canvas.height / 2) * zoomLevel + canvas.height / 2 + panY;
+            ['Left', 'Right'].forEach(side => {
+                let pt = calibrationConfig['center' + side];
+                let screenX = (pt.x - canvas.width / 2) * zoomLevel + canvas.width / 2 + panX;
+                let screenY = (pt.y - canvas.height / 2) * zoomLevel + canvas.height / 2 + panY;
                 
-                let el = document.getElementById('box-' + cornerNames[idx].toLowerCase());
+                let el = document.getElementById('marker-' + side.toLowerCase());
                 if (el) {
                     el.style.display = 'flex';
                     el.style.left = (screenX - 25) + 'px';
                     el.style.top = (screenY - 25) + 'px';
-                    if (idx === activeCornerIndex) {
-                        el.style.background = '#ff00ff';
-                        el.style.color = '#ffffff';
-                        el.style.borderColor = '#ffffff';
-                    } else {
-                        el.style.background = '#ffeb3b';
-                        el.style.color = '#000000';
-                        el.style.borderColor = '#333333';
-                    }
                 }
             });
         }
@@ -315,6 +283,7 @@
                     drawXAxisOnly();
                 } else if (appState === 'ADJUST_MARTYR' && martyrImage) {
                     drawCover(martyrImage);
+                    updateCornersFromCenters();
                     drawOverlay();
                 } else if (appState === 'PRODUCTION') {
                     drawCover(video);
@@ -322,7 +291,7 @@
                 }
 
                 ctx.restore();
-                updateCornerDOM();
+                updateMarkersDOM();
             }
 
             requestAnimationFrame(mainLoop);
@@ -338,106 +307,67 @@
         }
 
         function drawOverlay() {
-            let midLeftY = (corners[0].y + corners[3].y) / 2;
-            let midRightY = (corners[1].y + corners[2].y) / 2;
-
             ctx.strokeStyle = 'red';
             ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.moveTo(0, (midLeftY + midRightY) / 2);
-            ctx.lineTo(canvas.width, (midLeftY + midRightY) / 2);
+            ctx.moveTo(calibrationConfig.centerLeft.x, calibrationConfig.centerLeft.y);
+            ctx.lineTo(calibrationConfig.centerRight.x, calibrationConfig.centerRight.y);
             ctx.stroke();
 
-            ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(corners[0].x, corners[0].y);
-            ctx.lineTo(corners[1].x, corners[1].y);
-            ctx.lineTo(corners[2].x, corners[2].y);
-            ctx.lineTo(corners[3].x, corners[3].y);
-            ctx.closePath();
-            ctx.stroke();
+            let c = calibrationConfig.corners;
+            if (c.length === 4) {
+                ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(c[0].x, c[0].y);
+                ctx.lineTo(c[1].x, c[1].y);
+                ctx.lineTo(c[2].x, c[2].y);
+                ctx.lineTo(c[3].x, c[3].y);
+                ctx.closePath();
+                ctx.stroke();
+            }
         }
 
-        // --- Interaction tactile directe : Glisser/Déplacer les coins au doigt ---
-        let draggingIdx = null;
-        let lastClientX = 0;
-        let lastClientY = 0;
+        let activeDraggingMarker = null;
 
-        ['sg', 'sd', 'id', 'ig'].forEach((name, idx) => {
-            let el = document.getElementById('box-' + name);
+        ['Left', 'Right'].forEach(side => {
+            let el = document.getElementById('marker-' + side.toLowerCase());
             
             el.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
-                activeCornerIndex = idx;
-                centerDpadBtn.innerText = cornerNames[activeCornerIndex];
-                draggingIdx = idx;
-                lastClientX = e.clientX;
-                lastClientY = e.clientY;
+                activeDraggingMarker = side;
                 el.setPointerCapture(e.pointerId);
             });
 
             el.addEventListener('pointermove', (e) => {
-                if (draggingIdx === idx) {
+                if (activeDraggingMarker === side) {
                     e.preventDefault();
-                    let dx = (e.clientX - lastClientX) / zoomLevel;
-                    let dy = (e.clientY - lastClientY) / zoomLevel;
-                    lastClientX = e.clientX;
-                    lastClientY = e.clientY;
-                    corners[idx].x += dx;
-                    corners[idx].y += dy;
+                    let rect = canvas.getBoundingClientRect();
+                    let clientX = e.clientX - rect.left;
+                    let clientY = e.clientY - rect.top;
+                    
+                    let canvasX = (clientX - canvas.width / 2 - panX) / zoomLevel + canvas.width / 2;
+                    let canvasY = (clientY - canvas.height / 2 - panY) / zoomLevel + canvas.height / 2;
+                    
+                    calibrationConfig['center' + side].x = canvasX;
+                    calibrationConfig['center' + side].y = canvasY;
                 }
             });
 
             el.addEventListener('pointerup', (e) => {
-                if (draggingIdx === idx) {
-                    draggingIdx = null;
+                if (activeDraggingMarker === side) {
+                    activeDraggingMarker = null;
                     try { el.releasePointerCapture(e.pointerId); } catch(err){}
                 }
             });
         });
 
-        // D-Pad Coins
-        document.getElementById('dpad-up').addEventListener('click', () => moveActiveCorner(0, -3));
-        document.getElementById('dpad-down').addEventListener('click', () => moveActiveCorner(0, 3));
-        document.getElementById('dpad-left').addEventListener('click', () => moveActiveCorner(-3, 0));
-        document.getElementById('dpad-right').addEventListener('click', () => moveActiveCorner(3, 0));
-
-        centerDpadBtn.addEventListener('click', () => {
-            activeCornerIndex = (activeCornerIndex + 1) % 4;
-            centerDpadBtn.innerText = cornerNames[activeCornerIndex];
-        });
-
-        function moveActiveCorner(dx, dy) {
-            if (appState !== 'ADJUST_MARTYR') return;
-            corners[activeCornerIndex].x += dx;
-            corners[activeCornerIndex].y += dy;
-        }
-
-        // Panoramique (Navigation 4 axes)
-        document.getElementById('pan-up').addEventListener('click', () => { panY += 25; });
-        document.getElementById('pan-down').addEventListener('click', () => { panY -= 25; });
-        document.getElementById('pan-left').addEventListener('click', () => { panX += 25; });
-        document.getElementById('pan-right').addEventListener('click', () => { panX -= 25; });
-
-        // Zoom & Échelle
         document.getElementById('zoom-plus').addEventListener('click', () => { zoomLevel = Math.min(zoomLevel + 0.2, 3.0); });
         document.getElementById('zoom-minus').addEventListener('click', () => { 
             zoomLevel = Math.max(zoomLevel - 0.2, 1.0); 
             if (zoomLevel === 1.0) { panX = 0; panY = 0; }
         });
-
-        function scaleCorners(factor) {
-            let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
-            let cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4;
-            corners.forEach(p => {
-                p.x = cx + (p.x - cx) * factor;
-                p.y = cy + (p.y - cy) * factor;
-            });
-        }
-
-        document.getElementById('scale-plus').addEventListener('click', () => scaleCorners(1.03));
-        document.getElementById('scale-minus').addEventListener('click', () => scaleCorners(0.97));
+        document.getElementById('reset-view').addEventListener('click', () => { zoomLevel = 1.0; panX = 0; panY = 0; });
 
         btnAction.addEventListener('click', () => {
             if (appState === 'CAPTURE_MARTYR') {
@@ -451,15 +381,16 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Étape 2 : Glissez les carrés jaunes ou utilisez PAN";
-                    btnAction.innerText = "✅ Valider l'étalonnage";
+                    statusMsg.innerText = "Étape 2 : Positionnez les repères centraux de l'Étalon 11";
+                    btnAction.innerText = "✅ Valider et générer JSON";
                     controlPanel.style.display = 'flex';
                 };
             } else if (appState === 'ADJUST_MARTYR') {
-                localStorage.setItem('acuitix_config', JSON.stringify(corners));
+                updateCornersFromCenters();
+                localStorage.setItem('acuitix_etalon11_json', JSON.stringify(calibrationConfig));
 
                 appState = 'PRODUCTION';
-                statusMsg.innerText = "🎯 Mode Production actif (Étalonnage mémorisé)";
+                statusMsg.innerText = "🎯 Mode Production actif (Étalon 11 configuré)";
                 btnAction.style.display = 'none';
                 controlPanel.style.display = 'none';
                 zoomLevel = 1.0;
@@ -475,8 +406,8 @@
 
         function handleProductionCapture() {
             let origCanvas = document.createElement('canvas');
-            origCanvas.width = video.videoWidth || canvas.width;
-            origCanvas.height = video.videoHeight || canvas.height;
+            origCanvas.width = video.videoWidth || 1280;
+            origCanvas.height = video.videoHeight || 720;
             let origCtx = origCanvas.getContext('2d');
             origCtx.drawImage(video, 0, 0, origCanvas.width, origCanvas.height);
             lastCapturedOriginal = origCanvas.toDataURL('image/png');
@@ -487,26 +418,63 @@
             let layerCtx = layerCanvas.getContext('2d');
             layerCtx.drawImage(origCanvas, 0, 0);
 
-            let scaleFactorX = layerCanvas.width / canvas.width;
-            let scaleFactorY = layerCanvas.height / canvas.height;
+            let cw = canvas.width;
+            let ch = canvas.height;
+            let sw = origCanvas.width;
+            let sh = origCanvas.height;
+            let hRatio = cw / sw;
+            let vRatio = ch / sh;
+            let ratio = Math.max(hRatio, vRatio);
+            let centerShiftX = (cw - sw * ratio) / 2;
+            let centerShiftY = (ch - sh * ratio) / 2;
 
-            let midLeftY = (corners[0].y + corners[3].y) / 2;
-            let midRightY = (corners[1].y + corners[2].y) / 2;
+            function displayToVideo(pt) {
+                return {
+                    x: (pt.x - centerShiftX) / ratio,
+                    y: (pt.y - centerShiftY) / ratio
+                };
+            }
+
+            let vCl = displayToVideo(calibrationConfig.centerLeft);
+            let vCr = displayToVideo(calibrationConfig.centerRight);
+
+            let vDx = vCr.x - vCl.x;
+            let vDy = vCr.y - vCl.y;
+            let vDist = Math.sqrt(vDx * vDx + vDy * vDy);
+            let vAngle = Math.atan2(vDy, vDx);
+            let vFw = vDist * ETALON_SPECS.widthRatioFromCenters;
+            let vFh = vDist * ETALON_SPECS.heightRatioFromCenters;
+            let vCx = (vCl.x + vCr.x) / 2;
+            let vCy = (vCl.y + vCr.y) / 2;
+
+            let cos = Math.cos(vAngle);
+            let sin = Math.sin(vAngle);
+            let hw = vFw / 2;
+            let hh = vFh / 2;
+
+            function vRot(lx, ly) {
+                return {
+                    x: vCx + (lx * cos - ly * sin),
+                    y: vCy + (lx * sin + ly * cos)
+                };
+            }
+
+            let vc = [vRot(-hw, -hh), vRot(hw, -hh), vRot(hw, hh), vRot(-hw, hh)];
 
             layerCtx.strokeStyle = 'red';
-            layerCtx.lineWidth = 4 * scaleFactorX;
+            layerCtx.lineWidth = Math.max(2, 4 / ratio);
             layerCtx.beginPath();
-            layerCtx.moveTo(0, ((midLeftY + midRightY) / 2) * scaleFactorY);
-            layerCtx.lineTo(layerCanvas.width, ((midLeftY + midRightY) / 2) * scaleFactorY);
+            layerCtx.moveTo(vCl.x, vCl.y);
+            layerCtx.lineTo(vCr.x, vCr.y);
             layerCtx.stroke();
 
             layerCtx.strokeStyle = 'yellow';
-            layerCtx.lineWidth = 4 * scaleFactorX;
+            layerCtx.lineWidth = Math.max(2, 4 / ratio);
             layerCtx.beginPath();
-            layerCtx.moveTo(corners[0].x * scaleFactorX, corners[0].y * scaleFactorY);
-            layerCtx.lineTo(corners[1].x * scaleFactorX, corners[1].y * scaleFactorY);
-            layerCtx.lineTo(corners[2].x * scaleFactorX, corners[2].y * scaleFactorY);
-            layerCtx.lineTo(corners[3].x * scaleFactorX, corners[3].y * scaleFactorY);
+            layerCtx.moveTo(vc[0].x, vc[0].y);
+            layerCtx.lineTo(vc[1].x, vc[1].y);
+            layerCtx.lineTo(vc[2].x, vc[2].y);
+            layerCtx.lineTo(vc[3].x, vc[3].y);
             layerCtx.closePath();
             layerCtx.stroke();
 
@@ -525,30 +493,24 @@
 
         document.getElementById('dl-with-layers').addEventListener('click', () => {
             let link = document.createElement('a');
-            link.download = 'etalon11_prod_calques.png';
+            link.download = 'acuitix_etalon11_calques.png';
             link.href = lastCapturedWithLayers;
             link.click();
         });
 
         document.getElementById('dl-original').addEventListener('click', () => {
             let link = document.createElement('a');
-            link.download = 'etalon11_prod_originale.png';
+            link.download = 'acuitix_etalon11_originale.png';
             link.href = lastCapturedOriginal;
             link.click();
         });
 
-        document.getElementById('share-btn').addEventListener('click', async () => {
-            if (navigator.share) {
-                try {
-                    let blob = await (await fetch(lastCapturedWithLayers)).blob();
-                    let file = new File([blob], "etalon11_production.png", { type: "image/png" });
-                    await navigator.share({ title: 'Acuitix Optix - Production', files: [file] });
-                } catch (err) {
-                    console.log("Partage annulé");
-                }
-            } else {
-                alert("Le partage natif n'est pas pris en charge.");
-            }
+        document.getElementById('dl-json').addEventListener('click', () => {
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(calibrationConfig, null, 2));
+            let link = document.createElement('a');
+            link.download = "acuitix_etalon11_config.json";
+            link.href = dataStr;
+            link.click();
         });
     </script>
 </body>
