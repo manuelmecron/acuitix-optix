@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - ETALON11NW</title>
-    <!-- Chargement d'OpenCV pour la reconnaissance automatique des contours -->
+    <title>Acuitix Optix - ETALON11NW Précision</title>
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -14,13 +13,13 @@
         #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
         #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
 
-        /* 2.a Axe X rouge continu de part en part */
+        /* Axe X rouge continu de part en part */
         .red-axis {
             position: absolute; top: 50%; left: 0; width: 100%; height: 2px;
             background: red; transform: translateY(-50%); pointer-events: none; z-index: 10;
         }
 
-        /* 3. Boutons de capture ergonomiques pour les pouces (gauche et droite) */
+        /* Boutons de capture ergonomiques (pouces gauche/droite) */
         .capture-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
             padding: 15px 25px; border-radius: 30px; font-size: 16px; font-weight: bold;
@@ -29,7 +28,7 @@
         #btn-left { left: 30px; }
         #btn-right { right: 30px; }
 
-        /* 1. Alerte paysagère obligatoire */
+        /* Alerte mode paysage obligatoire */
         #landscape-warning {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.95); color: white; z-index: 2000;
@@ -37,7 +36,14 @@
             text-align: center; padding: 20px; font-size: 20px;
         }
 
-        /* 4 & 5. Interface de prévisualisation et options d'export */
+        /* Indicateur de recherche du gabarit */
+        #status-msg {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); color: yellow; padding: 6px 14px;
+            border-radius: 15px; font-size: 13px; z-index: 15; font-family: monospace;
+        }
+
+        /* Modale de prévisualisation et export */
         #preview-modal {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.92); z-index: 3000; display: none;
@@ -54,13 +60,12 @@
 </head>
 <body>
 
-    <!-- 1. Écran de verrouillage mode portrait -->
     <div id="landscape-warning">
-        📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b><br>
-        <span style="font-size: 14px; color: #aaa; margin-top: 10px;">L'application nécessite une prise de vue horizontale.</span>
+        📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <!-- 4 & 5. Modale de prévisualisation et export -->
+    <div id="status-msg">Recherche du gabarit ETALON11NW...</div>
+
     <div id="preview-modal">
         <canvas id="preview-canvas"></canvas>
         <div class="modal-actions">
@@ -71,7 +76,6 @@
         </div>
     </div>
 
-    <!-- Interface principale caméra -->
     <div id="app-container">
         <video id="videoInput" autoplay playsinline muted></video>
         <canvas id="canvasOutput"></canvas>
@@ -86,6 +90,7 @@
         let canvasOutput = document.getElementById('canvasOutput');
         let ctx = canvasOutput.getContext('2d');
         let warningScreen = document.getElementById('landscape-warning');
+        let statusMsg = document.getElementById('status-msg');
         let previewModal = document.getElementById('preview-modal');
         let previewCanvas = document.getElementById('preview-canvas');
         let previewCtx = previewCanvas.getContext('2d');
@@ -93,7 +98,6 @@
         let streaming = false;
         let detectedCorners = null;
 
-        // 1. Contrôle strict de l'orientation
         function checkOrientation() {
             if (window.innerHeight > window.innerWidth) {
                 warningScreen.style.display = 'flex';
@@ -105,7 +109,6 @@
         window.addEventListener('orientationchange', checkOrientation);
         checkOrientation();
 
-        // Initialisation de la caméra arrière
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
@@ -113,15 +116,15 @@
                 streaming = true;
                 requestAnimationFrame(processFrame);
             })
-            .catch(err => alert("Erreur d'accès à la caméra : " + err.message));
+            .catch(err => alert("Erreur caméra : " + err.message));
 
-        let src, gray, blurred, thresh, contours, hierarchy;
+        let src, gray, blurred, edges, contours, hierarchy;
         function initOpenCVObjects() {
             if (typeof cv !== 'undefined' && cv.Mat) {
                 src = new cv.Mat();
                 gray = new cv.Mat();
                 blurred = new cv.Mat();
-                thresh = new cv.Mat();
+                edges = new cv.Mat();
                 contours = new cv.MatVector();
                 hierarchy = new cv.Mat();
             } else {
@@ -130,7 +133,6 @@
         }
         setTimeout(initOpenCVObjects, 1000);
 
-        // 2.b Traitement vidéo en direct et reconnaissance automatique des 4 coins ETALON11NW
         function processFrame() {
             if (!streaming) return;
 
@@ -148,8 +150,10 @@
 
                     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
                     cv.GaussianBlur(gray, blurred, {width: 5, height: 5}, 0);
-                    cv.threshold(blurred, thresh, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-                    cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+                    
+                    // Détection des contours par Canny (idéal pour les cadres noirs sur fond clair)
+                    cv.Canny(blurred, edges, 50, 150);
+                    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
                     let maxArea = 0;
                     let bestContour = null;
@@ -157,14 +161,25 @@
                     for (let i = 0; i < contours.size(); ++i) {
                         let cnt = contours.get(i);
                         let area = cv.contourArea(cnt);
-                        if (area > (canvasOutput.width * canvasOutput.height) * 0.1) {
+                        
+                        // Taille minimale du gabarit dans l'image (ex: 5% de l'écran)
+                        if (area > (canvasOutput.width * canvasOutput.height) * 0.05) {
                             let perimeter = cv.arcLength(cnt, true);
                             let approx = new cv.Mat();
                             cv.approxPolyDP(cnt, approx, 0.02 * perimeter, true);
-                            if (approx.rows === 4 && area > maxArea) {
-                                maxArea = area;
-                                if (bestContour) bestContour.delete();
-                                bestContour = approx;
+
+                            if (approx.rows === 4 && cv.isContourConvex(approx)) {
+                                let rect = cv.boundingRect(approx);
+                                let aspectRatio = rect.width / rect.height;
+
+                                // Ratio cible de l'ETALON11 : 170/100 = 1.7 (on tolère de 1.3 à 2.2)
+                                if (aspectRatio >= 1.3 && aspectRatio <= 2.2 && area > maxArea) {
+                                    maxArea = area;
+                                    if (bestContour) bestContour.delete();
+                                    bestContour = approx;
+                                } else {
+                                    approx.delete();
+                                }
                             } else {
                                 approx.delete();
                             }
@@ -180,9 +195,11 @@
                             });
                         }
                         drawLiveCorners(detectedCorners);
+                        statusModelStatus(true);
                         bestContour.delete();
                     } else {
                         detectedCorners = null;
+                        statusModelStatus(false);
                     }
                 } catch (e) {
                     console.error(e);
@@ -192,21 +209,29 @@
             requestAnimationFrame(processFrame);
         }
 
+        function statusModelStatus(found) {
+            if (found) {
+                statusMsg.innerText = "✅ Gabarit ETALON11NW verrouillé";
+                statusMsg.style.color = "#28a745";
+            } else {
+                statusMsg.innerText = "🔍 Recherche du gabarit ETALON11NW...";
+                statusMsg.style.color = "yellow";
+            }
+        }
+
         function drawLiveCorners(corners) {
             ctx.strokeStyle = 'yellow';
-            ctx.lineWidth = 5;
-            const size = 50;
+            ctx.lineWidth = 4;
+            const size = 45;
             corners.forEach(p => {
                 ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
             });
         }
 
-        // 3. Déclenchement de la photo (depuis le bouton gauche ou droit)
         let lastCapturedWithLayers = null;
         let lastCapturedOriginal = null;
 
         function handleCapture() {
-            // A. Génération de l'image originale (sans calques)
             let origCanvas = document.createElement('canvas');
             origCanvas.width = video.videoWidth;
             origCanvas.height = video.videoHeight;
@@ -214,14 +239,13 @@
             origCtx.drawImage(video, 0, 0);
             lastCapturedOriginal = origCanvas.toDataURL('image/png');
 
-            // B. Génération de l'image avec calques incrustés (4 & 5)
             let layerCanvas = document.createElement('canvas');
             layerCanvas.width = video.videoWidth;
             layerCanvas.height = video.videoHeight;
             let layerCtx = layerCanvas.getContext('2d');
             layerCtx.drawImage(origCanvas, 0, 0);
 
-            // Dessin de l'axe X rouge continu
+            // Axe X rouge continu
             layerCtx.strokeStyle = 'red';
             layerCtx.lineWidth = 4;
             layerCtx.beginPath();
@@ -229,24 +253,17 @@
             layerCtx.lineTo(layerCanvas.width, layerCanvas.height / 2);
             layerCtx.stroke();
 
-            // Dessin des 4 coins (automatiques ou de secours centrés)
-            layerCtx.strokeStyle = 'yellow';
-            layerCtx.lineWidth = 6;
+            // 4 coins (dessinés uniquement si détectés avec succès)
             if (detectedCorners && detectedCorners.length === 4) {
+                layerCtx.strokeStyle = 'yellow';
+                layerCtx.lineWidth = 5;
                 detectedCorners.forEach(p => {
                     layerCtx.strokeRect(p.x - 30, p.y - 30, 60, 60);
                 });
-            } else {
-                let w = layerCanvas.width * 0.6;
-                let h = layerCanvas.height * 0.6;
-                let x = (layerCanvas.width - w) / 2;
-                let y = (layerCanvas.height - h) / 2;
-                layerCtx.strokeRect(x, y, w, h);
             }
 
             lastCapturedWithLayers = layerCanvas.toDataURL('image/png');
 
-            // Affichage dans la modale de prévisualisation
             previewCanvas.width = layerCanvas.width;
             previewCanvas.height = layerCanvas.height;
             previewCtx.drawImage(layerCanvas, 0, 0);
@@ -257,7 +274,6 @@
         document.getElementById('btn-right').addEventListener('click', handleCapture);
         document.getElementById('close-preview').addEventListener('click', () => previewModal.style.display = 'none');
 
-        // 5. Options d'export (Téléchargement avec/sans calques et Partage)
         document.getElementById('dl-with-layers').addEventListener('click', () => {
             let link = document.createElement('a');
             link.download = 'etalon11nw_avec_calques.png';
@@ -277,15 +293,12 @@
                 try {
                     let blob = await (await fetch(lastCapturedWithLayers)).blob();
                     let file = new File([blob], "etalon11nw.png", { type: "image/png" });
-                    await navigator.share({
-                        title: 'Acuitix Optix - Capture',
-                        files: [file]
-                    });
+                    await navigator.share({ title: 'Acuitix Optix - Capture', files: [file] });
                 } catch (err) {
-                    console.log("Partage annulé ou interrompu");
+                    console.log("Partage annulé");
                 }
             } else {
-                alert("Le partage natif n'est pas pris en charge par votre navigateur.");
+                alert("Le partage natif n'est pas pris en charge.");
             }
         });
     </script>
