@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - ETALON11NW Précision Coins</title>
+    <title>Acuitix Optix - ETALON11 Multi-Phases</title>
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -13,13 +13,11 @@
         #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
         #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Axe X rouge continu de part en part */
         .red-axis {
             position: absolute; top: 50%; left: 0; width: 100%; height: 2px;
             background: red; transform: translateY(-50%); pointer-events: none; z-index: 10;
         }
 
-        /* Boutons de capture ergonomiques (pouces gauche/droite) */
         .capture-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
             padding: 15px 25px; border-radius: 30px; font-size: 16px; font-weight: bold;
@@ -95,6 +93,15 @@
         let streaming = false;
         let detectedCorners = null;
 
+        // Profils de détection séquentielle (phases multiples)
+        const hsvProfiles = [
+            { name: "Normal",     h1_l: [0, 50, 50],   h1_h: [10, 255, 255], h2_l: [170, 50, 50],  h2_h: [180, 255, 255] },
+            { name: "Sombre/LED", h1_l: [0, 30, 30],   h1_h: [15, 255, 255], h2_l: [165, 30, 30],  h2_h: [180, 255, 255] },
+            { name: "Vif/Strict", h1_l: [0, 100, 100], h1_h: [8, 255, 255],  h2_l: [172, 100, 100], h2_h: [180, 255, 255] },
+            { name: "Large",      h1_l: [0, 20, 20],   h1_h: [20, 255, 255], h2_l: [160, 20, 20],  h2_h: [180, 255, 255] }
+        ];
+        let currentPhase = 0;
+
         function checkOrientation() {
             if (window.innerHeight > window.innerWidth) {
                 warningScreen.style.display = 'flex';
@@ -149,12 +156,13 @@
                     cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
                     cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
 
-                    let low1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 50, 50, 0]);
-                    let high1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [12, 255, 255, 255]);
+                    let profile = hsvProfiles[currentPhase];
+                    let low1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h1_l.concat([0]));
+                    let high1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h1_h.concat([255]));
                     cv.inRange(hsv, low1, high1, mask1);
 
-                    let low2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [168, 50, 50, 0]);
-                    let high2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [180, 255, 255, 255]);
+                    let low2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h2_l.concat([0]));
+                    let high2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h2_h.concat([255]));
                     cv.inRange(hsv, low2, high2, mask2);
 
                     cv.add(mask1, mask2, mask);
@@ -166,44 +174,49 @@
 
                     cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                    let squareBlobs = [];
+                    let largeSquares = []; // Pour les coins 15x15
+
                     for (let i = 0; i < contours.size(); ++i) {
                         let cnt = contours.get(i);
                         let area = cv.contourArea(cnt);
-                        if (area > 30 && area < 8000) {
+                        
+                        // Filtrer pour cibler en priorité les grands carrés d'angle (15x15)
+                        if (area > 40 && area < 10000) {
                             let rect = cv.boundingRect(cnt);
                             let aspect = rect.width / rect.height;
-                            // Filtrer pour ne garder que les formes proches du carré (les repères)
-                            if (aspect >= 0.7 && aspect <= 1.3) {
+                            if (aspect >= 0.6 && aspect <= 1.4) {
                                 let M_mom = cv.moments(cnt);
                                 if (M_mom.m00 > 0) {
-                                    squareBlobs.triangles = true;
-                                    squareBlobs.push({x: M_mom.m10 / M_mom.m00, y: M_mom.m01 / M_mom.m00});
+                                    largeSquares.push({
+                                        x: M_mom.m10 / M_mom.m00,
+                                        y: M_mom.m01 / M_mom.m00,
+                                        area: area
+                                    });
                                 }
                             }
                         }
                     }
 
-                    // Si on détecte au moins 4 carrés, on isole les 4 plus extrêmes (les coins du gabarit)
-                    if (squareBlobs.length >= 4) {
-                        // Trier par position Y pour séparer le haut et le bas
-                        squareBlobs.sort((a, b) => a.y - b.y);
-                        let topTwo = [squareBlobs[0], squareBlobs[1]].sort((a, b) => a.x - b.x);
-                        let bottomTwo = [squareBlobs[squareBlobs.length-2], squareBlobs[squareBlobs.length-1]].sort((a, b) => a.x - b.x);
+                    // On cherche à identifier les 4 plus grands carrés correspondants aux coins
+                    if (largeSquares.length >= 4) {
+                        // Trier par surface décroissante pour garder les plus gros (les coins 15x15 par rapport au milieu 10x10)
+                        largeSquares.sort((a, b) => b.area - a.area);
+                        let corners = largeSquares.slice(0, 4);
 
-                        detectedCorners = [
-                            topTwo[0],   // Haut-Gauche
-                            topTwo[1],   // Haut-Droit
-                            bottomTwo[1], // Bas-Droit
-                            bottomTwo[0]  // Bas-Gauche
-                        ];
+                        // Réorganiser Haut-Gauche, Haut-Droit, Bas-Droit, Bas-Gauche
+                        corners.sort((a, b) => a.y - b.y);
+                        let topTwo = [corners[0], corners[1]].sort((a, b) => a.x - b.x);
+                        let bottomTwo = [corners[2], corners[3]].sort((a, b) => a.x - b.x);
 
+                        detectedCorners = [topTwo[0], topTwo[1], bottomTwo[1], bottomTwo[0]];
                         drawLiveCorners(detectedCorners, 'yellow');
-                        statusMsg.innerText = "✅ Gabarit ETALON11NW détecté";
+                        statusMsg.innerText = `✅ Détecté [Phase: ${profile.name}]`;
                         statusMsg.style.color = "#28a745";
                     } else {
+                        // Échec sur cette phase -> Passage automatique à la phase suivante sur la prochaine frame
                         detectedCorners = null;
-                        // Mode de secours proportionnel strict (Ratio ETALON11 = 1.7)
+                        currentPhase = (currentPhase + 1) % hsvProfiles.length;
+
                         let w = canvasOutput.width * 0.5;
                         let h = w / 1.7;
                         let x = (canvasOutput.width - w) / 2;
@@ -212,7 +225,7 @@
                             {x: x, y: y}, {x: x+w, y: y}, {x: x+w, y: y+h}, {x: x, y: y+h}
                         ];
                         drawLiveCorners(detectedCorners, 'orange');
-                        statusMsg.innerText = `🔍 Recherche des coins (${squareBlobs.length}/4) - Guide ETALON11`;
+                        statusMsg.innerText = `🔄 Test phase : ${profile.name} (${largeSquares.length}/4 coins)`;
                         statusMsg.style.color = "orange";
                     }
 
@@ -250,7 +263,6 @@
             let layerCtx = layerCanvas.getContext('2d');
             layerCtx.drawImage(origCanvas, 0, 0);
 
-            // Axe X rouge continu
             layerCtx.strokeStyle = 'red';
             layerCtx.lineWidth = 4;
             layerCtx.beginPath();
@@ -258,7 +270,6 @@
             layerCtx.lineTo(layerCanvas.width, layerCanvas.height / 2);
             layerCtx.stroke();
 
-            // Calquage des coins
             if (detectedCorners && detectedCorners.length === 4) {
                 layerCtx.strokeStyle = 'yellow';
                 layerCtx.lineWidth = 5;
