@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Acuitix Optix - Calibration & Navigation</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
         #app-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -15,7 +15,7 @@
         .ui-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
             padding: 14px 22px; border-radius: 30px; font-size: 15px; font-weight: bold;
-            cursor: pointer; z-index: 20; box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+            cursor: pointer; z-index: 20; box-shadow: 0 4px 10px rgba(0,0,0,0.6); touch-action: auto;
         }
         #btn-action { left: 50%; transform: translateX(-50%); }
         #btn-left { left: 20px; display: none; }
@@ -31,13 +31,14 @@
             position: absolute; bottom: 80px; width: 100%; display: none;
             justify-content: space-around; align-items: center; padding: 0 10px; z-index: 25; pointer-events: none;
         }
-        .interactive-ui { pointer-events: auto; }
+        .interactive-ui { pointer-events: auto; touch-action: auto; }
 
-        /* Blocs HTML interactifs pour les coins (SG, SD, ID, IG) */
+        /* Blocs HTML interactifs pour les coins (Glissables au doigt) */
         .corner-box {
-            position: absolute; width: 44px; height: 44px; border: 2px solid #333;
+            position: absolute; width: 50px; height: 50px; border: 2px solid #333;
             font-weight: bold; font-size: 13px; display: none; align-items: center; justify-content: center;
             cursor: pointer; z-index: 26; box-shadow: 0 2px 6px rgba(0,0,0,0.5); user-select: none;
+            touch-action: none; border-radius: 6px;
         }
         #box-sg { background: #ffeb3b; color: black; }
         #box-sd { background: #ffeb3b; color: black; }
@@ -50,13 +51,13 @@
             border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .dpad button {
-            position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer;
+            position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer; touch-action: auto;
         }
         .dpad-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
         .dpad-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
         .dpad-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
         .dpad-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
-        .dpad-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+        .dpad-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; touch-action: auto; }
 
         /* Panneau de navigation 4 axes (PAN) */
         .pan-pad {
@@ -64,20 +65,20 @@
             border-radius: 50%; border: 2px solid #55a; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .pan-pad button {
-            position: absolute; background: #335; color: white; border: 1px solid #668; font-weight: bold; cursor: pointer;
+            position: absolute; background: #335; color: white; border: 1px solid #668; font-weight: bold; cursor: pointer; touch-action: auto;
         }
         .pan-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
         .pan-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
         .pan-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
         .pan-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
-        .pan-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #17a2b8; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; }
+        .pan-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #17a2b8; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; touch-action: auto; }
 
         .tools-group { display: flex; flex-direction: column; gap: 5px; }
         .tool-row { display: flex; gap: 5px; }
         .tool-btn {
             background: rgba(30,30,30,0.9); color: white; border: 1px solid #777;
             padding: 6px 8px; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4); touch-action: auto;
         }
 
         #landscape-warning {
@@ -96,7 +97,7 @@
         .modal-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
         .modal-actions button {
             padding: 10px 16px; background: #007bff; color: white; border: none; border-radius: 6px;
-            font-size: 14px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            font-size: 14px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.4); touch-action: auto;
         }
         .modal-actions button.secondary { background: #6c757d; }
     </style>
@@ -109,7 +110,7 @@
 
     <div id="status-msg">Étape 1 : Prenez la photo martyr guidé par l'axe X</div>
 
-    <!-- Blocs HTML pour les 4 coins interactifs -->
+    <!-- Blocs HTML interactifs glissables pour les 4 coins -->
     <div class="corner-box" id="box-sg">SG</div>
     <div class="corner-box" id="box-sd">SD</div>
     <div class="corner-box" id="box-id">ID</div>
@@ -217,20 +218,27 @@
             let savedConfig = localStorage.getItem('acuitix_config');
             if (savedConfig) {
                 try {
-                    corners = JSON.parse(savedConfig);
-                    return;
+                    let parsed = JSON.parse(savedConfig);
+                    if (Array.isArray(parsed) && parsed.length === 4) {
+                        let valid = parsed.every(p => typeof p.x === 'number' && typeof p.y === 'number' && p.x >= 0 && p.x <= w * 2 && p.y >= 0 && p.y <= h * 2);
+                        if (valid) {
+                            corners = parsed;
+                            return;
+                        }
+                    }
                 } catch(e) { console.error("Erreur lecture JSON config"); }
             }
 
-            let bw = w * 0.4;
-            let bh = bw / 1.7;
+            // Centrage parfait aligné sur l'axe X (au milieu de l'écran)
+            let bw = w * 0.5;
+            let bh = h * 0.3;
             let cx = w / 2;
             let cy = h / 2;
             corners = [
-                {x: cx - bw/2, y: cy - bh/2}, 
-                {x: cx + bw/2, y: cy - bh/2}, 
-                {x: cx + bw/2, y: cy + bh/2}, 
-                {x: cx - bw/2, y: cy + bh/2}  
+                {x: cx - bw/2, y: cy - bh/2}, // 0: SG
+                {x: cx + bw/2, y: cy - bh/2}, // 1: SD
+                {x: cx + bw/2, y: cy + bh/2}, // 2: ID
+                {x: cx - bw/2, y: cy + bh/2}  // 3: IG
             ];
         }
 
@@ -275,8 +283,8 @@
                 let el = document.getElementById('box-' + cornerNames[idx].toLowerCase());
                 if (el) {
                     el.style.display = 'flex';
-                    el.style.left = (screenX - 22) + 'px';
-                    el.style.top = (screenY - 22) + 'px';
+                    el.style.left = (screenX - 25) + 'px';
+                    el.style.top = (screenY - 25) + 'px';
                     if (idx === activeCornerIndex) {
                         el.style.background = '#ff00ff';
                         el.style.color = '#ffffff';
@@ -351,11 +359,41 @@
             ctx.stroke();
         }
 
-        // Permettre de cliquer sur les boîtes HTML des coins pour les sélectionner directement
+        // --- Interaction tactile directe : Glisser/Déplacer les coins au doigt ---
+        let draggingIdx = null;
+        let lastClientX = 0;
+        let lastClientY = 0;
+
         ['sg', 'sd', 'id', 'ig'].forEach((name, idx) => {
-            document.getElementById('box-' + name).addEventListener('click', () => {
+            let el = document.getElementById('box-' + name);
+            
+            el.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
                 activeCornerIndex = idx;
                 centerDpadBtn.innerText = cornerNames[activeCornerIndex];
+                draggingIdx = idx;
+                lastClientX = e.clientX;
+                lastClientY = e.clientY;
+                el.setPointerCapture(e.pointerId);
+            });
+
+            el.addEventListener('pointermove', (e) => {
+                if (draggingIdx === idx) {
+                    e.preventDefault();
+                    let dx = (e.clientX - lastClientX) / zoomLevel;
+                    let dy = (e.clientY - lastClientY) / zoomLevel;
+                    lastClientX = e.clientX;
+                    lastClientY = e.clientY;
+                    corners[idx].x += dx;
+                    corners[idx].y += dy;
+                }
+            });
+
+            el.addEventListener('pointerup', (e) => {
+                if (draggingIdx === idx) {
+                    draggingIdx = null;
+                    try { el.releasePointerCapture(e.pointerId); } catch(err){}
+                }
             });
         });
 
@@ -413,7 +451,7 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Étape 2 : Ajustez le cadre, touchez les coins ou naviguez avec PAN";
+                    statusMsg.innerText = "Étape 2 : Glissez les carrés jaunes ou utilisez PAN";
                     btnAction.innerText = "✅ Valider l'étalonnage";
                     controlPanel.style.display = 'flex';
                 };
