@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - ETALON11NW Couleur</title>
+    <title>Acuitix Optix - ETALON11NW Robuste</title>
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -61,7 +61,7 @@
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <div id="status-msg">Recherche des 4 repères rouges...</div>
+    <div id="status-msg">Initialisation...</div>
 
     <div id="preview-modal">
         <canvas id="preview-canvas"></canvas>
@@ -146,23 +146,21 @@
                     let cap = new cv.VideoCapture(video);
                     cap.read(src);
 
-                    // Conversion en HSV pour cibler précisément la couleur rouge des coins
                     cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
                     cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
 
-                    // Plages de rouge en HSV (le rouge englobe les deux bouts du spectre 0-10 et 170-180)
-                    let low1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 120, 70, 0]);
-                    let high1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [10, 255, 255, 255]);
+                    // Plages HSV élargies pour tolérer l'éclairage de bureau/LED
+                    let low1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 40, 40, 0]);
+                    let high1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [15, 255, 255, 255]);
                     cv.inRange(hsv, low1, high1, mask1);
 
-                    let low2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [170, 120, 70, 0]);
+                    let low2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [165, 40, 40, 0]);
                     let high2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [180, 255, 255, 255]);
                     cv.inRange(hsv, low2, high2, mask2);
 
                     cv.add(mask1, mask2, mask);
                     low1.delete(); high1.delete(); low2.delete(); high2.delete();
 
-                    // Nettoyage du bruit
                     let M = cv.Mat.ones(3, 3, cv.CV_8U);
                     cv.morphologyEx(mask, mask, cv.MORPH_OPEN, M);
                     M.delete();
@@ -170,11 +168,13 @@
                     cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
                     let redCenters = [];
+                    let totalArea = canvasOutput.width * canvasOutput.height;
+
                     for (let i = 0; i < contours.size(); ++i) {
                         let cnt = contours.get(i);
                         let area = cv.contourArea(cnt);
-                        // Filtrer pour ne garder que des carrés rouges d'une taille cohérente à l'écran
-                        if (area > 100 && area < 5000) {
+                        // Filtre de taille dynamique (de très petit à large selon le zoom)
+                        if (area > 20 && area < totalArea * 0.1) {
                             let M_mom = cv.moments(cnt);
                             if (M_mom.m00 > 0) {
                                 let cx = M_mom.m10 / M_mom.m00;
@@ -184,27 +184,28 @@
                         }
                     }
 
-                    // Si on trouve exactement ou au moins 4 repères rouges
                     if (redCenters.length >= 4) {
-                        // Trier pour identifier les 4 coins du rectangle global
                         redCenters.sort((a, b) => a.x - b.x);
                         let lefts = [redCenters[0], redCenters[1]].sort((a, b) => a.y - b.y);
                         let rights = [redCenters[redCenters.length-2], redCenters[redCenters.length-1]].sort((a, b) => a.y - b.y);
                         
-                        detectedCorners = [
-                            lefts[0],  // Haut-Gauche
-                            rights[0], // Haut-Droit
-                            rights[1], // Bas-Droit
-                            lefts[1]   // Bas-Gauche
-                        ];
-
-                        drawLiveCorners(detectedCorners);
-                        statusMsg.innerText = "✅ 4 coins ETALON11 verrouillés";
+                        detectedCorners = [lefts[0], rights[0], rights[1], lefts[1]];
+                        drawLiveCorners(detectedCorners, 'yellow');
+                        statusMsg.innerText = "✅ 4 repères rouges détectés";
                         statusMsg.style.color = "#28a745";
                     } else {
                         detectedCorners = null;
-                        statusMsg.innerText = "🔍 Recherche des 4 repères rouges (" + redCenters.length + "/4)...";
-                        statusMsg.style.color = "yellow";
+                        // Affichage d'un gabarit de secours proportionnel (ratio 1.7 - ETALON11)
+                        let w = canvasOutput.width * 0.5;
+                        let h = w / 1.7;
+                        let x = (canvasOutput.width - w) / 2;
+                        let y = (canvasOutput.height - h) / 2;
+                        detectedCorners = [
+                            {x: x, y: y}, {x: x+w, y: y}, {x: x+w, y: y+h}, {x: x, y: y+h}
+                        ];
+                        drawLiveCorners(detectedCorners, 'orange');
+                        statusMsg.innerText = `🔍 Repères rouges partiels (${redCenters.length}/4) - Mode Secours ETALON11`;
+                        statusMsg.style.color = "orange";
                     }
 
                 } catch (e) {
@@ -215,8 +216,8 @@
             requestAnimationFrame(processFrame);
         }
 
-        function drawLiveCorners(corners) {
-            ctx.strokeStyle = 'yellow';
+        function drawLiveCorners(corners, color) {
+            ctx.strokeStyle = color;
             ctx.lineWidth = 4;
             const size = 45;
             corners.forEach(p => {
@@ -249,7 +250,7 @@
             layerCtx.lineTo(layerCanvas.width, layerCanvas.height / 2);
             layerCtx.stroke();
 
-            // Calquage des 4 coins détectés par couleur
+            // Calquage des coins (détectés ou de secours)
             if (detectedCorners && detectedCorners.length === 4) {
                 layerCtx.strokeStyle = 'yellow';
                 layerCtx.lineWidth = 5;
