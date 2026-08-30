@@ -3,17 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - ETALON11 Fix Init</title>
-    <script>
-        // Hook obligatoire pour qu'OpenCV prévienne quand il est prêt
-        var Module = {
-            onRuntimeInitialized() {
-                console.log("OpenCV est prêt.");
-                initOpenCVObjects();
-            }
-        };
-    </script>
-    <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
+    <title>Acuitix Optix - Calibration Martyr & Production</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
@@ -22,30 +12,27 @@
         #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
         #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
 
-        .red-axis {
-            position: absolute; top: 50%; left: 0; width: 100%; height: 2px;
-            background: red; transform: translateY(-50%); pointer-events: none; z-index: 10;
-        }
-
-        .capture-btn {
+        /* Éléments d'interface et boutons */
+        .ui-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
             padding: 15px 25px; border-radius: 30px; font-size: 16px; font-weight: bold;
             cursor: pointer; z-index: 20; box-shadow: 0 4px 10px rgba(0,0,0,0.6);
         }
-        #btn-left { left: 30px; }
-        #btn-right { right: 30px; }
+        #btn-action { left: 50%; transform: translateX(-50%); }
+        #btn-left { left: 30px; display: none; }
+        #btn-right { right: 30px; display: none; }
+
+        #status-msg {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); color: yellow; padding: 8px 16px;
+            border-radius: 15px; font-size: 14px; z-index: 25; font-family: monospace; text-align: center;
+        }
 
         #landscape-warning {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.95); color: white; z-index: 2000;
             display: none; flex-direction: column; align-items: center; justify-content: center;
             text-align: center; padding: 20px; font-size: 20px;
-        }
-
-        #status-msg {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.7); color: yellow; padding: 6px 14px;
-            border-radius: 15px; font-size: 13px; z-index: 15; font-family: monospace;
         }
 
         #preview-modal {
@@ -68,7 +55,7 @@
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <div id="status-msg">Démarrage de la caméra...</div>
+    <div id="status-msg">Étape 1 : Prenez votre photo martyr de référence</div>
 
     <div id="preview-modal">
         <canvas id="preview-canvas"></canvas>
@@ -83,33 +70,33 @@
     <div id="app-container">
         <video id="videoInput" autoplay playsinline muted></video>
         <canvas id="canvasOutput"></canvas>
-        <div class="red-axis"></div>
         
-        <button class="capture-btn" id="btn-left">📸 Capturer</button>
-        <button class="capture-btn" id="btn-right">📸 Capturer</button>
+        <button class="ui-btn" id="btn-action">📸 Prendre la Photo Martyr</button>
+        <button class="ui-btn" id="btn-left">📸 Capturer</button>
+        <button class="ui-btn" id="btn-right">📸 Capturer</button>
     </div>
 
     <script>
         let video = document.getElementById('videoInput');
-        let canvasOutput = document.getElementById('canvasOutput');
-        let ctx = canvasOutput.getContext('2d');
-        let warningScreen = document.getElementById('landscape-warning');
+        let canvas = document.getElementById('canvasOutput');
+        let ctx = canvas.getContext('2d');
         let statusMsg = document.getElementById('status-msg');
+        let btnAction = document.getElementById('btn-action');
+        let btnLeft = document.getElementById('btn-left');
+        let btnRight = document.getElementById('btn-right');
+        let warningScreen = document.getElementById('landscape-warning');
+
         let previewModal = document.getElementById('preview-modal');
         let previewCanvas = document.getElementById('preview-canvas');
         let previewCtx = previewCanvas.getContext('2d');
 
+        let appState = 'CAPTURE_MARTYR'; // CAPTURE_MARTYR -> ADJUST_MARTYR -> PRODUCTION
+        let martyrImage = null;
         let streaming = false;
-        let detectedCorners = null;
-        let opencvReady = false;
 
-        const hsvProfiles = [
-            { name: "Normal",     h1_l: [0, 50, 50],   h1_h: [10, 255, 255], h2_l: [170, 50, 50],  h2_h: [180, 255, 255] },
-            { name: "Sombre/LED", h1_l: [0, 30, 30],   h1_h: [15, 255, 255], h2_l: [165, 30, 30],  h2_h: [180, 255, 255] },
-            { name: "Vif/Strict", h1_l: [0, 100, 100], h1_h: [8, 255, 255],  h2_l: [172, 100, 100], h2_h: [180, 255, 255] },
-            { name: "Large",      h1_l: [0, 20, 20],   h1_h: [20, 255, 255], h2_l: [160, 20, 20],  h2_h: [180, 255, 255] }
-        ];
-        let currentPhase = 0;
+        // Coordonnées interactives des 4 coins du gabarit (initialisées au centre par défaut)
+        let corners = [];
+        let activeCornerIndex = null;
 
         function checkOrientation() {
             if (window.innerHeight > window.innerWidth) {
@@ -122,138 +109,152 @@
         window.addEventListener('orientationchange', checkOrientation);
         checkOrientation();
 
-        let src, hsv, mask1, mask2, mask, contours, hierarchy;
-        function initOpenCVObjects() {
-            try {
-                src = new cv.Mat();
-                hsv = new cv.Mat();
-                mask1 = new cv.Mat();
-                mask2 = new cv.Mat();
-                mask = new cv.Mat();
-                contours = new cv.MatVector();
-                hierarchy = new cv.Mat();
-                opencvReady = true;
-                statusMsg.innerText = "🔍 Recherche de l'étalon...";
-            } catch(e) {
-                console.error("Erreur init OpenCV:", e);
-            }
-        }
-
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
                 video.play();
                 streaming = true;
-                requestAnimationFrame(processFrame);
+                requestAnimationFrame(mainLoop);
             })
             .catch(err => alert("Erreur caméra : " + err.message));
 
-        function processFrame() {
-            if (!streaming) return;
-
-            if (video.videoWidth > 0 && canvasOutput.width !== video.videoWidth) {
-                canvasOutput.width = video.videoWidth;
-                canvasOutput.height = video.videoHeight;
-            }
-
-            ctx.drawImage(video, 0, 0, canvasOutput.width, canvasOutput.height);
-
-            if (opencvReady && src && video.videoWidth > 0) {
-                try {
-                    let cap = new cv.VideoCapture(video);
-                    cap.read(src);
-
-                    cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
-                    cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
-
-                    let profile = hsvProfiles[currentPhase];
-                    let low1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h1_l.concat([0]));
-                    let high1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h1_h.concat([255]));
-                    cv.inRange(hsv, low1, high1, mask1);
-
-                    let low2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h2_l.concat([0]));
-                    let high2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), profile.h2_h.concat([255]));
-                    cv.inRange(hsv, low2, high2, mask2);
-
-                    cv.add(mask1, mask2, mask);
-                    low1.delete(); high1.delete(); low2.delete(); high2.delete();
-
-                    let M = cv.Mat.ones(2, 2, cv.CV_8U);
-                    cv.morphologyEx(mask, mask, cv.MORPH_OPEN, M);
-                    M.delete();
-
-                    cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-                    let largeSquares = [];
-                    for (let i = 0; i < contours.size(); ++i) {
-                        let cnt = contours.get(i);
-                        let area = cv.contourArea(cnt);
-                        
-                        if (area > 40 && area < 10000) {
-                            let rect = cv.boundingRect(cnt);
-                            let aspect = rect.width / rect.height;
-                            if (aspect >= 0.6 && aspect <= 1.4) {
-                                let M_mom = cv.moments(cnt);
-                                if (M_mom.m00 > 0) {
-                                    largeSquares.push({
-                                        x: M_mom.m10 / M_mom.m00,
-                                        y: M_mom.m01 / M_mom.m00,
-                                        area: area
-                                    });
-                                }
-                            }
-                        }
-                    }
-
-                    if (largeSquares.length >= 4) {
-                        largeSquares.sort((a, b) => b.area - a.area);
-                        let corners = largeSquares.slice(0, 4);
-
-                        corners.sort((a, b) => a.y - b.y);
-                        let topTwo = [corners[0], corners[1]].sort((a, b) => a.x - b.x);
-                        let bottomTwo = [corners[2], corners[3]].sort((a, b) => a.x - b.x);
-
-                        detectedCorners = [topTwo[0], topTwo[1], bottomTwo[1], bottomTwo[0]];
-                        drawLiveCorners(detectedCorners, 'yellow');
-                        statusMsg.innerText = `✅ Détecté [Phase: ${profile.name}]`;
-                        statusMsg.style.color = "#28a745";
-                    } else {
-                        detectedCorners = null;
-                        currentPhase = (currentPhase + 1) % hsvProfiles.length;
-
-                        let w = canvasOutput.width * 0.5;
-                        let h = w / 1.7;
-                        let x = (canvasOutput.width - w) / 2;
-                        let y = (canvasOutput.height - h) / 2;
-                        detectedCorners = [
-                            {x: x, y: y}, {x: x+w, y: y}, {x: x+w, y: y+h}, {x: x, y: y+h}
-                        ];
-                        drawLiveCorners(detectedCorners, 'orange');
-                        statusMsg.innerText = `🔄 Phase : ${profile.name} (${largeSquares.length}/4)`;
-                        statusMsg.style.color = "orange";
-                    }
-
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-
-            requestAnimationFrame(processFrame);
+        function initDefaultCorners(w, h) {
+            let bw = w * 0.4;
+            let bh = bw / 1.7;
+            let cx = w / 2;
+            let cy = h / 2;
+            corners = [
+                {x: cx - bw/2, y: cy - bh/2}, // Haut-Gauche
+                {x: cx + bw/2, y: cy - bh/2}, // Haut-Droit
+                {x: cx + bw/2, y: cy + bh/2}, // Bas-Droit
+                {x: cx - bw/2, y: cy + bh/2}  // Bas-Gauche
+            ];
         }
 
-        function drawLiveCorners(corners, color) {
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 4;
-            const size = 45;
-            corners.forEach(p => {
-                ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
+        function mainLoop() {
+            if (!streaming) return;
+
+            if (video.videoWidth > 0 && canvas.width !== video.videoWidth) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                initDefaultCorners(canvas.width, canvas.height);
+            }
+
+            if (appState === 'CAPTURE_MARTYR' || appState === 'PRODUCTION') {
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                if (appState === 'PRODUCTION') {
+                    drawOverlay();
+                }
+            } else if (appState === 'ADJUST_MARTYR') {
+                // Afficher l'image martyr figée avec les coins déplaçables
+                ctx.drawImage(martyrImage, 0, 0);
+                drawOverlay();
+            }
+
+            requestAnimationFrame(mainLoop);
+        }
+
+        function drawOverlay() {
+            // Axe X rouge invariable (reliant le milieu gauche au milieu droit ou calculé depuis les coins)
+            let midLeftY = (corners[0].y + corners[3].y) / 2;
+            let midRightY = (corners[1].y + corners[2].y) / 2;
+
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, (midLeftY + midRightY) / 2);
+            ctx.lineTo(canvas.width, (midLeftY + midRightY) / 2);
+            ctx.stroke();
+
+            // Cadre et poignées des 4 coins
+            ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(corners[0].x, corners[0].y);
+            ctx.lineTo(corners[1].x, corners[1].y);
+            ctx.lineTo(corners[2].x, corners[2].y);
+            ctx.lineTo(corners[3].x, corners[3].y);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Dessiner les poignées tactiles carrées
+            corners.forEach((p, idx) => {
+                ctx.fillStyle = (activeCornerIndex === idx) ? '#ff00ff' : 'yellow';
+                ctx.fillRect(p.x - 20, p.y - 20, 40, 40);
+                ctx.fillStyle = 'black';
+                ctx.font = '12px sans-serif';
+                ctx.fillText(['TL', 'TR', 'BR', 'BL'][idx], p.x - 8, p.y + 4);
             });
         }
 
+        // Gestion du tactile/souris pour déplacer les coins lors de l'ajustement de la photo martyr
+        function getTouchPos(e) {
+            let rect = canvas.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            // Adapter au ratio réel du canvas
+            let scaleX = canvas.width / rect.width;
+            let scaleY = canvas.height / rect.height;
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        canvas.addEventListener('pointerdown', (e) => {
+            if (appState !== 'ADJUST_MARTYR') return;
+            let pos = getTouchPos(e);
+            // Trouver le coin le plus proche touché (rayon de 50px)
+            corners.forEach((p, idx) => {
+                let dist = Math.hypot(p.x - pos.x, p.y - pos.y);
+                if (dist < 60) {
+                    activeCornerIndex = idx;
+                }
+            });
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (appState !== 'ADJUST_MARTYR' || activeCornerIndex === null) return;
+            let pos = getTouchPos(e);
+            corners[activeCornerIndex].x = pos.x;
+            corners[activeCornerIndex].y = pos.y;
+        });
+
+        canvas.addEventListener('pointerup', () => { activeCornerIndex = null; });
+        canvas.addEventListener('pointercancel', () => { activeCornerIndex = null; });
+
+        // Gestion des boutons d'action selon l'état
+        btnAction.addEventListener('click', () => {
+            if (appState === 'CAPTURE_MARTYR') {
+                // Figer l'image martyr
+                let tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                let tCtx = tempCanvas.getContext('2d');
+                tCtx.drawImage(video, 0, 0);
+                
+                martyrImage = new Image();
+                martyrImage.src = tempCanvas.toDataURL();
+                martyrImage.onload = () => {
+                    appState = 'ADJUST_MARTYR';
+                    statusMsg.innerText = "Étape 2 : Glissez les 4 coins sur votre étalon réel, puis validez";
+                    btnAction.innerText = "✅ Valider l'étalonnage";
+                };
+            } else if (appState === 'ADJUST_MARTYR') {
+                // Verrouiller l'étalonnage et passer en production
+                appState = 'PRODUCTION';
+                statusMsg.innerText = "🎯 Mode Production actif (Calage verrouillé)";
+                btnAction.style.display = 'none';
+                btnLeft.style.display = 'block';
+                btnRight.style.display = 'block';
+            }
+        });
+
+        // Fonction de capture définitive en mode production
         let lastCapturedWithLayers = null;
         let lastCapturedOriginal = null;
 
-        function handleCapture() {
+        function handleProductionCapture() {
             let origCanvas = document.createElement('canvas');
             origCanvas.width = video.videoWidth;
             origCanvas.height = video.videoHeight;
@@ -267,43 +268,49 @@
             let layerCtx = layerCanvas.getContext('2d');
             layerCtx.drawImage(origCanvas, 0, 0);
 
+            // Redessiner l'axe rouge et le cadre calibré sur la photo finale
+            let midLeftY = (corners[0].y + corners[3].y) / 2;
+            let midRightY = (corners[1].y + corners[2].y) / 2;
             layerCtx.strokeStyle = 'red';
             layerCtx.lineWidth = 4;
             layerCtx.beginPath();
-            layerCtx.moveTo(0, layerCanvas.height / 2);
-            layerCtx.lineTo(layerCanvas.width, layerCanvas.height / 2);
+            layerCtx.moveTo(0, (midLeftY + midRightY) / 2);
+            layerCtx.lineTo(layerCanvas.width, (midLeftY + midRightY) / 2);
             layerCtx.stroke();
 
-            if (detectedCorners && detectedCorners.length === 4) {
-                layerCtx.strokeStyle = 'yellow';
-                layerCtx.lineWidth = 5;
-                detectedCorners.forEach(p => {
-                    layerCtx.strokeRect(p.x - 30, p.y - 30, 60, 60);
-                });
-            }
+            layerCtx.strokeStyle = 'yellow';
+            layerCtx.lineWidth = 4;
+            layerCtx.beginPath();
+            layerCtx.moveTo(corners[0].x, corners[0].y);
+            layerCtx.lineTo(corners[1].x, corners[1].y);
+            layerCtx.lineTo(corners[2].x, corners[2].y);
+            layerCtx.lineTo(corners[3].x, corners[3].y);
+            layerCtx.closePath();
+            layerCtx.stroke();
 
             lastCapturedWithLayers = layerCanvas.toDataURL('image/png');
 
             previewCanvas.width = layerCanvas.width;
             previewCanvas.height = layerCanvas.height;
-            previewCtx.drawImage(layerCanvas, 0, 0);
+            let pCtx = previewCanvas.getContext('2d');
+            pCtx.drawImage(layerCanvas, 0, 0);
             previewModal.style.display = 'flex';
         }
 
-        document.getElementById('btn-left').addEventListener('click', handleCapture);
-        document.getElementById('btn-right').addEventListener('click', handleCapture);
+        btnLeft.addEventListener('click', handleProductionCapture);
+        btnRight.addEventListener('click', handleProductionCapture);
         document.getElementById('close-preview').addEventListener('click', () => previewModal.style.display = 'none');
 
         document.getElementById('dl-with-layers').addEventListener('click', () => {
             let link = document.createElement('a');
-            link.download = 'etalon11nw_avec_calques.png';
+            link.download = 'etalon11_prod_calques.png';
             link.href = lastCapturedWithLayers;
             link.click();
         });
 
         document.getElementById('dl-original').addEventListener('click', () => {
             let link = document.createElement('a');
-            link.download = 'etalon11nw_originale.png';
+            link.download = 'etalon11_prod_originale.png';
             link.href = lastCapturedOriginal;
             link.click();
         });
@@ -312,8 +319,8 @@
             if (navigator.share) {
                 try {
                     let blob = await (await fetch(lastCapturedWithLayers)).blob();
-                    let file = new File([blob], "etalon11nw.png", { type: "image/png" });
-                    await navigator.share({ title: 'Acuitix Optix - Capture', files: [file] });
+                    let file = new File([blob], "etalon11_production.png", { type: "image/png" });
+                    await navigator.share({ title: 'Acuitix Optix - Production', files: [file] });
                 } catch (err) {
                     console.log("Partage annulé");
                 }
