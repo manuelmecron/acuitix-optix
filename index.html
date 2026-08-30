@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Calibration Étalon 11 & Navigation</title>
+    <title>Acuitix Optix - Calibration Étalon 11</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
@@ -29,7 +29,7 @@
 
         #control-panel {
             position: absolute; bottom: 80px; width: 100%; display: none;
-            justify-content: space-around; align-items: center; padding: 0 10px; z-index: 25; pointer-events: none;
+            justify-content: space-between; align-items: center; padding: 0 15px; z-index: 25; pointer-events: none;
         }
         .interactive-ui { pointer-events: auto; touch-action: auto; }
 
@@ -40,40 +40,41 @@
             touch-action: none; border-radius: 6px; background: #ffeb3b; color: black;
         }
 
-        /* D-Pad / Croix de réglage fin */
+        /* D-Pad de réglage fin (Game Boy) -> À DROITE */
         .dpad {
-            position: relative; width: 100px; height: 100px; background: rgba(50,50,50,0.85);
+            position: relative; width: 90px; height: 90px; background: rgba(50,50,50,0.85);
             border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .dpad button {
             position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer; touch-action: auto;
         }
-        .dpad-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
-        .dpad-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
-        .dpad-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
-        .dpad-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
-        .dpad-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; touch-action: auto; color: white; }
+        .dpad-up { top: 2px; left: 29px; width: 32px; height: 26px; border-radius: 5px 5px 0 0; }
+        .dpad-down { bottom: 2px; left: 29px; width: 32px; height: 26px; border-radius: 0 0 5px 5px; }
+        .dpad-left { top: 29px; left: 2px; width: 26px; height: 32px; border-radius: 5px 0 0 5px; }
+        .dpad-right { top: 29px; right: 2px; width: 26px; height: 32px; border-radius: 0 5px 5px 0; }
+        .dpad-center { top: 28px; left: 28px; width: 34px; height: 34px; background: #007bff; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; touch-action: auto; color: white; }
 
-        /* Panneau de navigation 4 axes (PAN) */
+        /* Panneau de navigation PAN -> À GAUCHE */
         .pan-pad {
-            position: relative; width: 100px; height: 100px; background: rgba(30,30,50,0.85);
+            position: relative; width: 90px; height: 90px; background: rgba(30,30,50,0.85);
             border-radius: 50%; border: 2px solid #55a; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .pan-pad button {
             position: absolute; background: #335; color: white; border: 1px solid #668; font-weight: bold; cursor: pointer; touch-action: auto;
         }
-        .pan-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
-        .pan-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
-        .pan-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
-        .pan-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
-        .pan-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #17a2b8; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; touch-action: auto; color: white; }
+        .pan-up { top: 2px; left: 29px; width: 32px; height: 26px; border-radius: 5px 5px 0 0; }
+        .pan-down { bottom: 2px; left: 29px; width: 32px; height: 26px; border-radius: 0 0 5px 5px; }
+        .pan-left { top: 29px; left: 2px; width: 26px; height: 32px; border-radius: 5px 0 0 5px; }
+        .pan-right { top: 29px; right: 2px; width: 26px; height: 32px; border-radius: 0 5px 5px 0; }
+        .pan-center { top: 28px; left: 28px; width: 34px; height: 34px; background: #17a2b8; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; touch-action: auto; color: white; }
 
-        .tools-group { display: flex; flex-direction: column; gap: 5px; }
-        .tool-row { display: flex; gap: 5px; }
+        /* Groupe Zoom & Échelle -> AU CENTRE */
+        .tools-group { display: flex; flex-direction: column; gap: 4px; align-items: center; background: rgba(20,20,20,0.85); padding: 6px; border-radius: 8px; border: 1px solid #555; }
+        .tool-row { display: flex; gap: 4px; }
         .tool-btn {
-            background: rgba(30,30,30,0.9); color: white; border: 1px solid #777;
-            padding: 6px 10px; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.4); touch-action: auto;
+            background: rgba(40,40,40,0.9); color: white; border: 1px solid #777;
+            padding: 5px 8px; border-radius: 4px; font-weight: bold; font-size: 10px; cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.4); touch-action: auto;
         }
 
         #landscape-warning {
@@ -109,16 +110,7 @@
     <div class="central-marker" id="marker-right">C-D</div>
 
     <div id="control-panel">
-        <div class="tools-group interactive-ui">
-            <div class="tool-row">
-                <button class="tool-btn" id="zoom-plus">Zoom +</button>
-                <button class="tool-btn" id="zoom-minus">Zoom -</button>
-            </div>
-            <div class="tool-row">
-                <button class="tool-btn" id="reset-view" style="background:#555; width:100%;">Centrer</button>
-            </div>
-        </div>
-
+        <!-- 1. Navigation PAN à GAUCHE -->
         <div class="pan-pad interactive-ui">
             <button class="pan-up" id="pan-up">▲</button>
             <button class="pan-down" id="pan-down">▼</button>
@@ -127,6 +119,23 @@
             <div class="pan-center">PAN</div>
         </div>
 
+        <!-- 2. Gestion Zoom & Échelle au CENTRE -->
+        <div class="tools-group interactive-ui">
+            <div style="font-size:9px; color:#aaa; font-weight:bold;">ZOOM & ÉCHELLE</div>
+            <div class="tool-row">
+                <button class="tool-btn" id="zoom-plus">Zoom +</button>
+                <button class="tool-btn" id="zoom-minus">Zoom -</button>
+            </div>
+            <div class="tool-row">
+                <button class="tool-btn" id="scale-plus">Échelle +</button>
+                <button class="tool-btn" id="scale-minus">Échelle -</button>
+            </div>
+            <div class="tool-row">
+                <button class="tool-btn" id="reset-view" style="background:#555; width:100%;">Centrer</button>
+            </div>
+        </div>
+
+        <!-- 3. Croix de réglage fin Game Boy à DROITE -->
         <div class="dpad interactive-ui">
             <button class="dpad-up" id="dpad-up">▲</button>
             <button class="dpad-down" id="dpad-down">▼</button>
@@ -211,18 +220,24 @@
             }
         }
 
-        function initDefaultMarkers(w, h) {
+        // Initialisation centrée strictement sur l'axe X horizontal de la photo martyr (canvas.height / 2)
+        function initMartyrMarkers(w, h) {
             let saved = localStorage.getItem('acuitix_etalon11_json');
             if (saved) {
                 try {
                     let parsed = JSON.parse(saved);
                     if (parsed && parsed.centerLeft && parsed.centerRight) {
                         calibrationConfig = parsed;
+                        if (parsed.specs) {
+                            ETALON_SPECS.widthRatioFromCenters = parsed.specs.widthRatioFromCenters || 1.6;
+                            ETALON_SPECS.heightRatioFromCenters = parsed.specs.heightRatioFromCenters || 0.9;
+                        }
                         return;
                     }
                 } catch(e) { console.error("Erreur lecture JSON"); }
             }
 
+            // Ancrage précis sur l'axe X au milieu exact de l'écran
             let cy = h / 2;
             calibrationConfig.centerLeft = { x: w * 0.35, y: cy };
             calibrationConfig.centerRight = { x: w * 0.65, y: cy };
@@ -264,7 +279,6 @@
             ];
         }
 
-        // Forçage explicite du flux vidéo en résolution paysage (width > height)
         const constraints = {
             video: {
                 facingMode: 'environment',
@@ -279,17 +293,14 @@
                 video.srcObject = stream;
                 video.play();
                 streaming = true;
-                initDefaultMarkers(window.innerWidth, window.innerHeight);
                 requestAnimationFrame(mainLoop);
             })
             .catch(err => {
-                // Fallback souple si la résolution idéale échoue sur certains appareils mobiles
                 navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
                     .then(stream => {
                         video.srcObject = stream;
                         video.play();
                         streaming = true;
-                        initDefaultMarkers(window.innerWidth, window.innerHeight);
                         requestAnimationFrame(mainLoop);
                     })
                     .catch(e => alert("Erreur caméra : " + e.message));
@@ -478,6 +489,17 @@
             zoomLevel = Math.max(zoomLevel - 0.2, 1.0); 
             if (zoomLevel === 1.0) { panX = 0; panY = 0; }
         });
+
+        // Gestion d'échelle dynamique
+        document.getElementById('scale-plus').addEventListener('click', () => {
+            ETALON_SPECS.widthRatioFromCenters = parseFloat((ETALON_SPECS.widthRatioFromCenters + 0.05).toFixed(2));
+            ETALON_SPECS.heightRatioFromCenters = parseFloat((ETALON_SPECS.heightRatioFromCenters + 0.05).toFixed(2));
+        });
+        document.getElementById('scale-minus').addEventListener('click', () => {
+            ETALON_SPECS.widthRatioFromCenters = Math.max(0.5, parseFloat((ETALON_SPECS.widthRatioFromCenters - 0.05).toFixed(2)));
+            ETALON_SPECS.heightRatioFromCenters = Math.max(0.3, parseFloat((ETALON_SPECS.heightRatioFromCenters - 0.05).toFixed(2)));
+        });
+
         document.getElementById('reset-view').addEventListener('click', () => { zoomLevel = 1.0; panX = 0; panY = 0; });
 
         btnAction.addEventListener('click', () => {
@@ -492,12 +514,15 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Étape 2 : Ajustez C-G / C-D via le PAN et le D-Pad";
+                    statusMsg.innerText = "Étape 2 : Ajustez l'échelle et les repères C-G / C-D";
                     btnAction.innerText = "✅ Valider et générer JSON";
                     controlPanel.style.display = 'flex';
+                    // Initialisation pré-positionnée sur l'axe X central
+                    initMartyrMarkers(canvas.width, canvas.height);
                 };
             } else if (appState === 'ADJUST_MARTYR') {
                 updateCornersFromCenters();
+                calibrationConfig.specs = ETALON_SPECS;
                 localStorage.setItem('acuitix_etalon11_json', JSON.stringify(calibrationConfig));
 
                 appState = 'PRODUCTION';
@@ -618,6 +643,7 @@
         });
 
         document.getElementById('dl-json').addEventListener('click', () => {
+            calibrationConfig.specs = ETALON_SPECS;
             let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(calibrationConfig, null, 2));
             let link = document.createElement('a');
             link.download = "acuitix_etalon11_config.json";
