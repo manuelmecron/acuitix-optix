@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - ETALON11NW Robuste</title>
+    <title>Acuitix Optix - ETALON11NW Précision Coins</title>
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -149,53 +149,61 @@
                     cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
                     cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
 
-                    // Plages HSV élargies pour tolérer l'éclairage de bureau/LED
-                    let low1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 40, 40, 0]);
-                    let high1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [15, 255, 255, 255]);
+                    let low1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 50, 50, 0]);
+                    let high1 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [12, 255, 255, 255]);
                     cv.inRange(hsv, low1, high1, mask1);
 
-                    let low2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [165, 40, 40, 0]);
+                    let low2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [168, 50, 50, 0]);
                     let high2 = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [180, 255, 255, 255]);
                     cv.inRange(hsv, low2, high2, mask2);
 
                     cv.add(mask1, mask2, mask);
                     low1.delete(); high1.delete(); low2.delete(); high2.delete();
 
-                    let M = cv.Mat.ones(3, 3, cv.CV_8U);
+                    let M = cv.Mat.ones(2, 2, cv.CV_8U);
                     cv.morphologyEx(mask, mask, cv.MORPH_OPEN, M);
                     M.delete();
 
                     cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                    let redCenters = [];
-                    let totalArea = canvasOutput.width * canvasOutput.height;
-
+                    let squareBlobs = [];
                     for (let i = 0; i < contours.size(); ++i) {
                         let cnt = contours.get(i);
                         let area = cv.contourArea(cnt);
-                        // Filtre de taille dynamique (de très petit à large selon le zoom)
-                        if (area > 20 && area < totalArea * 0.1) {
-                            let M_mom = cv.moments(cnt);
-                            if (M_mom.m00 > 0) {
-                                let cx = M_mom.m10 / M_mom.m00;
-                                let cy = M_mom.m01 / M_mom.m00;
-                                redCenters.push({x: cx, y: cy});
+                        if (area > 30 && area < 8000) {
+                            let rect = cv.boundingRect(cnt);
+                            let aspect = rect.width / rect.height;
+                            // Filtrer pour ne garder que les formes proches du carré (les repères)
+                            if (aspect >= 0.7 && aspect <= 1.3) {
+                                let M_mom = cv.moments(cnt);
+                                if (M_mom.m00 > 0) {
+                                    squareBlobs.triangles = true;
+                                    squareBlobs.push({x: M_mom.m10 / M_mom.m00, y: M_mom.m01 / M_mom.m00});
+                                }
                             }
                         }
                     }
 
-                    if (redCenters.length >= 4) {
-                        redCenters.sort((a, b) => a.x - b.x);
-                        let lefts = [redCenters[0], redCenters[1]].sort((a, b) => a.y - b.y);
-                        let rights = [redCenters[redCenters.length-2], redCenters[redCenters.length-1]].sort((a, b) => a.y - b.y);
-                        
-                        detectedCorners = [lefts[0], rights[0], rights[1], lefts[1]];
+                    // Si on détecte au moins 4 carrés, on isole les 4 plus extrêmes (les coins du gabarit)
+                    if (squareBlobs.length >= 4) {
+                        // Trier par position Y pour séparer le haut et le bas
+                        squareBlobs.sort((a, b) => a.y - b.y);
+                        let topTwo = [squareBlobs[0], squareBlobs[1]].sort((a, b) => a.x - b.x);
+                        let bottomTwo = [squareBlobs[squareBlobs.length-2], squareBlobs[squareBlobs.length-1]].sort((a, b) => a.x - b.x);
+
+                        detectedCorners = [
+                            topTwo[0],   // Haut-Gauche
+                            topTwo[1],   // Haut-Droit
+                            bottomTwo[1], // Bas-Droit
+                            bottomTwo[0]  // Bas-Gauche
+                        ];
+
                         drawLiveCorners(detectedCorners, 'yellow');
-                        statusMsg.innerText = "✅ 4 repères rouges détectés";
+                        statusMsg.innerText = "✅ Gabarit ETALON11NW détecté";
                         statusMsg.style.color = "#28a745";
                     } else {
                         detectedCorners = null;
-                        // Affichage d'un gabarit de secours proportionnel (ratio 1.7 - ETALON11)
+                        // Mode de secours proportionnel strict (Ratio ETALON11 = 1.7)
                         let w = canvasOutput.width * 0.5;
                         let h = w / 1.7;
                         let x = (canvasOutput.width - w) / 2;
@@ -204,7 +212,7 @@
                             {x: x, y: y}, {x: x+w, y: y}, {x: x+w, y: y+h}, {x: x, y: y+h}
                         ];
                         drawLiveCorners(detectedCorners, 'orange');
-                        statusMsg.innerText = `🔍 Repères rouges partiels (${redCenters.length}/4) - Mode Secours ETALON11`;
+                        statusMsg.innerText = `🔍 Recherche des coins (${squareBlobs.length}/4) - Guide ETALON11`;
                         statusMsg.style.color = "orange";
                     }
 
@@ -250,7 +258,7 @@
             layerCtx.lineTo(layerCanvas.width, layerCanvas.height / 2);
             layerCtx.stroke();
 
-            // Calquage des coins (détectés ou de secours)
+            // Calquage des coins
             if (detectedCorners && detectedCorners.length === 4) {
                 layerCtx.strokeStyle = 'yellow';
                 layerCtx.lineWidth = 5;
