@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Fix Flux & SG/SD/ID/IG</title>
+    <title>Acuitix Optix - Calibration & Production</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
         #app-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         #videoInput { display: none; }
-        #canvasOutput { width: 100%; height: 100%; object-fit: cover; transform-origin: center; }
+        #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
 
         .ui-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
@@ -81,17 +81,13 @@
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <div id="status-msg">Étape 1 : Prenez votre photo martyr (Axe X et calques actifs)</div>
+    <div id="status-msg">Étape 1 : Prenez la photo martyr guidé par l'axe X</div>
 
     <div id="control-panel">
         <div class="tools-group interactive-ui">
             <div class="tool-row">
                 <button class="tool-btn" id="scale-plus">Échelle +</button>
                 <button class="tool-btn" id="scale-minus">Échelle -</button>
-            </div>
-            <div class="tool-row">
-                <button class="tool-btn" id="zoom-plus">Zoom +</button>
-                <button class="tool-btn" id="zoom-minus">Zoom -</button>
             </div>
         </div>
 
@@ -145,7 +141,6 @@
         let corners = [];
         let activeCornerIndex = 0; // 0: SG, 1: SD, 2: ID, 3: IG
         const cornerNames = ['SG', 'SD', 'ID', 'IG'];
-        let zoomLevel = 1.0;
 
         function checkOrientation() {
             if (window.innerHeight > window.innerWidth) {
@@ -159,15 +154,24 @@
         checkOrientation();
 
         function initDefaultCorners(w, h) {
+            // Charger depuis le localStorage (JSON) si disponible pour le magnétisme/mémoire
+            let savedConfig = localStorage.getItem('acuitix_config');
+            if (savedConfig) {
+                try {
+                    corners = JSON.parse(savedConfig);
+                    return;
+                } catch(e) { console.error("Erreur lecture JSON config"); }
+            }
+
             let bw = w * 0.4;
             let bh = bw / 1.7;
             let cx = w / 2;
             let cy = h / 2;
             corners = [
-                {x: cx - bw/2, y: cy - bh/2}, // 0: SG (Supérieur Gauche)
-                {x: cx + bw/2, y: cy - bh/2}, // 1: SD (Supérieur Droit)
-                {x: cx + bw/2, y: cy + bh/2}, // 2: ID (Inférieur Droit)
-                {x: cx - bw/2, y: cy + bh/2}  // 3: IG (Inférieur Gauche)
+                {x: cx - bw/2, y: cy - bh/2}, // 0: SG
+                {x: cx + bw/2, y: cy - bh/2}, // 1: SD
+                {x: cx + bw/2, y: cy + bh/2}, // 2: ID
+                {x: cx - bw/2, y: cy + bh/2}  // 3: IG
             ];
         }
 
@@ -186,7 +190,6 @@
             requestAnimationFrame(mainLoop);
         });
 
-        // Sécurité si loadedmetadata est déjà passé
         setTimeout(() => {
             if (canvas.width === 0 && video.videoWidth > 0) {
                 canvas.width = video.videoWidth;
@@ -206,11 +209,17 @@
                     initDefaultCorners(canvas.width, canvas.height);
                 }
 
-                if (appState === 'CAPTURE_MARTYR' || appState === 'PRODUCTION') {
+                if (appState === 'CAPTURE_MARTYR') {
+                    // Étape 1 : Uniquement le flux vidéo et l'axe X rouge central
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    drawOverlay();
+                    drawXAxisOnly();
                 } else if (appState === 'ADJUST_MARTYR' && martyrImage) {
+                    // Étape 2 : Image martyr figée avec axe X et cadre d'étalonnage complet
                     ctx.drawImage(martyrImage, 0, 0);
+                    drawOverlay();
+                } else if (appState === 'PRODUCTION') {
+                    // Étape 4 : Production avec flux vidéo, axe X et cadre configuré
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     drawOverlay();
                 }
             }
@@ -218,21 +227,30 @@
             requestAnimationFrame(mainLoop);
         }
 
+        function drawXAxisOnly() {
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+        }
+
         function drawOverlay() {
             let midLeftY = (corners[0].y + corners[3].y) / 2;
             let midRightY = (corners[1].y + corners[2].y) / 2;
 
-            // Axe X rouge invariable
+            // Axe X rouge
             ctx.strokeStyle = 'red';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4;
             ctx.beginPath();
             ctx.moveTo(0, (midLeftY + midRightY) / 2);
             ctx.lineTo(canvas.width, (midLeftY + midRightY) / 2);
             ctx.stroke();
 
-            // Cadre géométrique jaune/cyan
+            // Cadre d'étalonnage jaune/cyan
             ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4;
             ctx.beginPath();
             ctx.moveTo(corners[0].x, corners[0].y);
             ctx.lineTo(corners[1].x, corners[1].y);
@@ -241,7 +259,7 @@
             ctx.closePath();
             ctx.stroke();
 
-            // Poignées des 4 coins (SG, SD, ID, IG)
+            // Poignées SG, SD, ID, IG
             corners.forEach((p, idx) => {
                 ctx.fillStyle = (appState === 'ADJUST_MARTYR' && activeCornerIndex === idx) ? '#ff00ff' : 'yellow';
                 ctx.fillRect(p.x - 22, p.y - 22, 44, 44);
@@ -280,15 +298,6 @@
         document.getElementById('scale-plus').addEventListener('click', () => scaleCorners(1.03));
         document.getElementById('scale-minus').addEventListener('click', () => scaleCorners(0.97));
 
-        document.getElementById('zoom-plus').addEventListener('click', () => {
-            zoomLevel = Math.min(zoomLevel + 0.1, 2.5);
-            canvas.style.transform = `scale(${zoomLevel})`;
-        });
-        document.getElementById('zoom-minus').addEventListener('click', () => {
-            zoomLevel = Math.max(zoomLevel - 0.1, 1.0);
-            canvas.style.transform = `scale(${zoomLevel})`;
-        });
-
         btnAction.addEventListener('click', () => {
             if (appState === 'CAPTURE_MARTYR') {
                 let tempCanvas = document.createElement('canvas');
@@ -301,16 +310,18 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Ajustez les coins (SG, SD, ID, IG), puis validez";
+                    statusMsg.innerText = "Étape 2 : Ajustez le cadre (SG, SD, ID, IG) puis validez";
                     btnAction.innerText = "✅ Valider l'étalonnage";
                     controlPanel.style.display = 'flex';
                 };
             } else if (appState === 'ADJUST_MARTYR') {
+                // Sauvegarde de la configuration en JSON (localStorage) pour le magnétisme / mémoire
+                localStorage.setItem('acuitix_config', JSON.stringify(corners));
+
                 appState = 'PRODUCTION';
-                statusMsg.innerText = "🎯 Mode Production actif - Axe X & Échelle verrouillés";
+                statusMsg.innerText = "🎯 Mode Production actif (Étalonnage mémorisé)";
                 btnAction.style.display = 'none';
                 controlPanel.style.display = 'none';
-                canvas.style.transform = 'scale(1)';
                 btnLeft.style.display = 'block';
                 btnRight.style.display = 'block';
             }
