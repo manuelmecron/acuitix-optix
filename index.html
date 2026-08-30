@@ -33,39 +33,50 @@
         }
         .interactive-ui { pointer-events: auto; }
 
+        /* Blocs HTML interactifs pour les coins (SG, SD, ID, IG) */
+        .corner-box {
+            position: absolute; width: 44px; height: 44px; border: 2px solid #333;
+            font-weight: bold; font-size: 13px; display: none; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 26; box-shadow: 0 2px 6px rgba(0,0,0,0.5); user-select: none;
+        }
+        #box-sg { background: #ffeb3b; color: black; }
+        #box-sd { background: #ffeb3b; color: black; }
+        #box-id { background: #ffeb3b; color: black; }
+        #box-ig { background: #ffeb3b; color: black; }
+
         /* D-Pad Coins */
         .dpad {
-            position: relative; width: 110px; height: 110px; background: rgba(50,50,50,0.85);
+            position: relative; width: 100px; height: 100px; background: rgba(50,50,50,0.85);
             border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .dpad button {
             position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer;
         }
-        .dpad-up { top: 4px; left: 35px; width: 40px; height: 32px; border-radius: 6px 6px 0 0; }
-        .dpad-down { bottom: 4px; left: 35px; width: 40px; height: 32px; border-radius: 0 0 6px 6px; }
-        .dpad-left { top: 35px; left: 4px; width: 32px; height: 40px; border-radius: 6px 0 0 6px; }
-        .dpad-right { top: 35px; right: 4px; width: 32px; height: 40px; border-radius: 0 6px 6px 0; }
-        .dpad-center { top: 35px; left: 35px; width: 40px; height: 40px; background: #007bff; border-radius: 50%; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+        .dpad-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
+        .dpad-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
+        .dpad-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
+        .dpad-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
+        .dpad-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
 
-        /* Panneau de navigation Pano 4 axes */
+        /* Panneau de navigation 4 axes (PAN) */
         .pan-pad {
-            position: relative; width: 110px; height: 110px; background: rgba(30,30,50,0.85);
+            position: relative; width: 100px; height: 100px; background: rgba(30,30,50,0.85);
             border-radius: 50%; border: 2px solid #55a; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .pan-pad button {
             position: absolute; background: #335; color: white; border: 1px solid #668; font-weight: bold; cursor: pointer;
         }
-        .pan-up { top: 4px; left: 35px; width: 40px; height: 32px; border-radius: 6px 6px 0 0; }
-        .pan-down { bottom: 4px; left: 35px; width: 40px; height: 32px; border-radius: 0 0 6px 6px; }
-        .pan-left { top: 35px; left: 4px; width: 32px; height: 40px; border-radius: 6px 0 0 6px; }
-        .pan-right { top: 35px; right: 4px; width: 32px; height: 40px; border-radius: 0 6px 6px 0; }
-        .pan-center { top: 35px; left: 35px; width: 40px; height: 40px; background: #17a2b8; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+        .pan-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
+        .pan-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
+        .pan-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
+        .pan-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
+        .pan-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #17a2b8; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; }
 
-        .tools-group { display: flex; flex-direction: column; gap: 6px; }
-        .tool-row { display: flex; gap: 6px; }
+        .tools-group { display: flex; flex-direction: column; gap: 5px; }
+        .tool-row { display: flex; gap: 5px; }
         .tool-btn {
             background: rgba(30,30,30,0.9); color: white; border: 1px solid #777;
-            padding: 8px 10px; border-radius: 6px; font-weight: bold; font-size: 12px; cursor: pointer;
+            padding: 6px 8px; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.4);
         }
 
@@ -98,6 +109,12 @@
 
     <div id="status-msg">Étape 1 : Prenez la photo martyr guidé par l'axe X</div>
 
+    <!-- Blocs HTML pour les 4 coins interactifs -->
+    <div class="corner-box" id="box-sg">SG</div>
+    <div class="corner-box" id="box-sd">SD</div>
+    <div class="corner-box" id="box-id">ID</div>
+    <div class="corner-box" id="box-ig">IG</div>
+
     <div id="control-panel">
         <!-- Groupe Outils (Zoom / Échelle) -->
         <div class="tools-group interactive-ui">
@@ -111,7 +128,7 @@
             </div>
         </div>
 
-        <!-- Pad de Navigation 4 axes (Panoramique) -->
+        <!-- Pad de Navigation 4 axes (PAN) -->
         <div class="pan-pad interactive-ui">
             <button class="pan-up" id="pan-up">▲</button>
             <button class="pan-down" id="pan-down">▼</button>
@@ -164,15 +181,14 @@
         let previewModal = document.getElementById('preview-modal');
         let previewCanvas = document.getElementById('preview-canvas');
 
-        let appState = 'CAPTURE_MARTYR'; // CAPTURE_MARTYR -> ADJUST_MARTYR -> PRODUCTION
+        let appState = 'CAPTURE_MARTYR'; 
         let martyrImage = null;
         let streaming = false;
 
         let corners = [];
-        let activeCornerIndex = 0; // 0: SG, 1: SD, 2: ID, 3: IG
+        let activeCornerIndex = 0; 
         const cornerNames = ['SG', 'SD', 'ID', 'IG'];
 
-        // Variables de navigation (Zoom et Panoramique)
         let zoomLevel = 1.0;
         let panX = 0;
         let panY = 0;
@@ -211,10 +227,10 @@
             let cx = w / 2;
             let cy = h / 2;
             corners = [
-                {x: cx - bw/2, y: cy - bh/2}, // 0: SG
-                {x: cx + bw/2, y: cy - bh/2}, // 1: SD
-                {x: cx + bw/2, y: cy + bh/2}, // 2: ID
-                {x: cx - bw/2, y: cy + bh/2}  // 3: IG
+                {x: cx - bw/2, y: cy - bh/2}, 
+                {x: cx + bw/2, y: cy - bh/2}, 
+                {x: cx + bw/2, y: cy + bh/2}, 
+                {x: cx - bw/2, y: cy + bh/2}  
             ];
         }
 
@@ -228,7 +244,6 @@
             })
             .catch(err => alert("Erreur caméra : " + err.message));
 
-        // Fonction anti-distorsion (reproduit object-fit: cover dans le canvas)
         function drawCover(source) {
             let cw = canvas.width;
             let ch = canvas.height;
@@ -245,6 +260,36 @@
             ctx.drawImage(source, 0, 0, sw, sh, centerShiftX, centerShiftY, sw * ratio, sh * ratio);
         }
 
+        function updateCornerDOM() {
+            if (appState !== 'ADJUST_MARTYR') {
+                ['sg', 'sd', 'id', 'ig'].forEach(name => {
+                    document.getElementById('box-' + name).style.display = 'none';
+                });
+                return;
+            }
+
+            corners.forEach((p, idx) => {
+                let screenX = (p.x - canvas.width / 2) * zoomLevel + canvas.width / 2 + panX;
+                let screenY = (p.y - canvas.height / 2) * zoomLevel + canvas.height / 2 + panY;
+                
+                let el = document.getElementById('box-' + cornerNames[idx].toLowerCase());
+                if (el) {
+                    el.style.display = 'flex';
+                    el.style.left = (screenX - 22) + 'px';
+                    el.style.top = (screenY - 22) + 'px';
+                    if (idx === activeCornerIndex) {
+                        el.style.background = '#ff00ff';
+                        el.style.color = '#ffffff';
+                        el.style.borderColor = '#ffffff';
+                    } else {
+                        el.style.background = '#ffeb3b';
+                        el.style.color = '#000000';
+                        el.style.borderColor = '#333333';
+                    }
+                }
+            });
+        }
+
         function mainLoop() {
             if (!streaming) return;
             resizeCanvasToDisplay();
@@ -253,7 +298,6 @@
                 ctx.save();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Application du zoom et du panoramique (navigation 4 axes)
                 ctx.translate(canvas.width / 2 + panX, canvas.height / 2 + panY);
                 ctx.scale(zoomLevel, zoomLevel);
                 ctx.translate(-canvas.width / 2, -canvas.height / 2);
@@ -270,6 +314,7 @@
                 }
 
                 ctx.restore();
+                updateCornerDOM();
             }
 
             requestAnimationFrame(mainLoop);
@@ -288,7 +333,6 @@
             let midLeftY = (corners[0].y + corners[3].y) / 2;
             let midRightY = (corners[1].y + corners[2].y) / 2;
 
-            // Axe X rouge
             ctx.strokeStyle = 'red';
             ctx.lineWidth = 4;
             ctx.beginPath();
@@ -296,7 +340,6 @@
             ctx.lineTo(canvas.width, (midLeftY + midRightY) / 2);
             ctx.stroke();
 
-            // Cadre d'étalonnage jaune/cyan
             ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
             ctx.lineWidth = 4;
             ctx.beginPath();
@@ -306,18 +349,17 @@
             ctx.lineTo(corners[3].x, corners[3].y);
             ctx.closePath();
             ctx.stroke();
-
-            // Poignées SG, SD, ID, IG
-            corners.forEach((p, idx) => {
-                ctx.fillStyle = (appState === 'ADJUST_MARTYR' && activeCornerIndex === idx) ? '#ff00ff' : 'yellow';
-                ctx.fillRect(p.x - 22, p.y - 22, 44, 44);
-                ctx.fillStyle = 'black';
-                ctx.font = 'bold 13px sans-serif';
-                ctx.fillText(cornerNames[idx], p.x - 11, p.y + 5);
-            });
         }
 
-        // Contrôles D-Pad Coins
+        // Permettre de cliquer sur les boîtes HTML des coins pour les sélectionner directement
+        ['sg', 'sd', 'id', 'ig'].forEach((name, idx) => {
+            document.getElementById('box-' + name).addEventListener('click', () => {
+                activeCornerIndex = idx;
+                centerDpadBtn.innerText = cornerNames[activeCornerIndex];
+            });
+        });
+
+        // D-Pad Coins
         document.getElementById('dpad-up').addEventListener('click', () => moveActiveCorner(0, -3));
         document.getElementById('dpad-down').addEventListener('click', () => moveActiveCorner(0, 3));
         document.getElementById('dpad-left').addEventListener('click', () => moveActiveCorner(-3, 0));
@@ -334,7 +376,7 @@
             corners[activeCornerIndex].y += dy;
         }
 
-        // Contrôles Panoramiques (Navigation 4 axes dans l'image)
+        // Panoramique (Navigation 4 axes)
         document.getElementById('pan-up').addEventListener('click', () => { panY += 25; });
         document.getElementById('pan-down').addEventListener('click', () => { panY -= 25; });
         document.getElementById('pan-left').addEventListener('click', () => { panX += 25; });
@@ -362,8 +404,8 @@
         btnAction.addEventListener('click', () => {
             if (appState === 'CAPTURE_MARTYR') {
                 let tempCanvas = document.createElement('canvas');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
+                tempCanvas.width = video.videoWidth || 1280;
+                tempCanvas.height = video.videoHeight || 720;
                 let tCtx = tempCanvas.getContext('2d');
                 tCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
                 
@@ -371,7 +413,7 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Étape 2 : Ajustez le cadre et naviguez avec PAN";
+                    statusMsg.innerText = "Étape 2 : Ajustez le cadre, touchez les coins ou naviguez avec PAN";
                     btnAction.innerText = "✅ Valider l'étalonnage";
                     controlPanel.style.display = 'flex';
                 };
