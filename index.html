@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - État Avancé D-Pad</title>
+    <title>Acuitix Optix - Fix Flux & SG/SD/ID/IG</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
         #app-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
-        #canvasOutput { width: 100%; height: 100%; object-fit: cover; transform-origin: center; transition: transform 0.1s ease; }
+        #videoInput { display: none; }
+        #canvasOutput { width: 100%; height: 100%; object-fit: cover; transform-origin: center; }
 
         .ui-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
@@ -27,16 +27,14 @@
             border-radius: 15px; font-size: 13px; z-index: 25; font-family: monospace; text-align: center;
         }
 
-        /* Panneau de contrôle D-Pad & Échelle (affiché uniquement pendant l'ajustement) */
         #control-panel {
             position: absolute; bottom: 80px; width: 100%; display: none;
             justify-content: space-around; align-items: center; padding: 0 20px; z-index: 25; pointer-events: none;
         }
         .interactive-ui { pointer-events: auto; }
 
-        /* Croix Game Boy */
         .dpad {
-            position: relative; width: 120px; height: 120px; background: rgba(50,50,50,0.8);
+            position: relative; width: 120px; height: 120px; background: rgba(50,50,50,0.85);
             border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .dpad button {
@@ -46,13 +44,12 @@
         .dpad-down { bottom: 5px; left: 40px; width: 40px; height: 35px; border-radius: 0 0 6px 6px; }
         .dpad-left { top: 40px; left: 5px; width: 35px; height: 40px; border-radius: 6px 0 0 6px; }
         .dpad-right { top: 40px; right: 5px; width: 35px; height: 40px; border-radius: 0 6px 6px 0; }
-        .dpad-center { top: 40px; left: 40px; width: 40px; height: 40px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+        .dpad-center { top: 40px; left: 40px; width: 40px; height: 40px; background: #007bff; border-radius: 50%; font-size: 11px; display: flex; align-items: center; justify-content: center; }
 
-        /* Boutons Échelle et Zoom */
         .tools-group { display: flex; flex-direction: column; gap: 8px; }
         .tool-row { display: flex; gap: 8px; }
         .tool-btn {
-            background: rgba(30,30,30,0.85); color: white; border: 1px solid #777;
+            background: rgba(30,30,30,0.9); color: white; border: 1px solid #777;
             padding: 10px 14px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.4);
         }
@@ -84,10 +81,9 @@
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <div id="status-msg">Étape 1 : Prenez votre photo martyr (L'axe X rouge est actif)</div>
+    <div id="status-msg">Étape 1 : Prenez votre photo martyr (Axe X et calques actifs)</div>
 
     <div id="control-panel">
-        <!-- Échelle & Zoom -->
         <div class="tools-group interactive-ui">
             <div class="tool-row">
                 <button class="tool-btn" id="scale-plus">Échelle +</button>
@@ -99,13 +95,12 @@
             </div>
         </div>
 
-        <!-- Croix Game Boy de réglage fin -->
         <div class="dpad interactive-ui">
             <button class="dpad-up" id="dpad-up">▲</button>
             <button class="dpad-down" id="dpad-down">▼</button>
             <button class="dpad-left" id="dpad-left">◀</button>
             <button class="dpad-right" id="dpad-right">▶</button>
-            <button class="dpad-center" id="dpad-center">TL</button>
+            <button class="dpad-center" id="dpad-center">SG</button>
         </div>
     </div>
 
@@ -148,8 +143,8 @@
         let streaming = false;
 
         let corners = [];
-        let activeCornerIndex = 0; // 0: TL, 1: TR, 2: BR, 3: BL
-        const cornerNames = ['TL', 'TR', 'BR', 'BL'];
+        let activeCornerIndex = 0; // 0: SG, 1: SD, 2: ID, 3: IG
+        const cornerNames = ['SG', 'SD', 'ID', 'IG'];
         let zoomLevel = 1.0;
 
         function checkOrientation() {
@@ -163,43 +158,61 @@
         window.addEventListener('orientationchange', checkOrientation);
         checkOrientation();
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-            .then(stream => {
-                video.srcObject = stream;
-                video.play();
-                streaming = true;
-                requestAnimationFrame(mainLoop);
-            })
-            .catch(err => alert("Erreur caméra : " + err.message));
-
         function initDefaultCorners(w, h) {
             let bw = w * 0.4;
             let bh = bw / 1.7;
             let cx = w / 2;
             let cy = h / 2;
             corners = [
-                {x: cx - bw/2, y: cy - bh/2},
-                {x: cx + bw/2, y: cy - bh/2},
-                {x: cx + bw/2, y: cy + bh/2},
-                {x: cx - bw/2, y: cy + bh/2}
+                {x: cx - bw/2, y: cy - bh/2}, // 0: SG (Supérieur Gauche)
+                {x: cx + bw/2, y: cy - bh/2}, // 1: SD (Supérieur Droit)
+                {x: cx + bw/2, y: cy + bh/2}, // 2: ID (Inférieur Droit)
+                {x: cx - bw/2, y: cy + bh/2}  // 3: IG (Inférieur Gauche)
             ];
         }
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            .then(stream => {
+                video.srcObject = stream;
+                video.play();
+                streaming = true;
+            })
+            .catch(err => alert("Erreur caméra : " + err.message));
+
+        video.addEventListener('loadedmetadata', () => {
+            canvas.width = video.videoWidth || window.innerWidth;
+            canvas.height = video.videoHeight || window.innerHeight;
+            initDefaultCorners(canvas.width, canvas.height);
+            requestAnimationFrame(mainLoop);
+        });
+
+        // Sécurité si loadedmetadata est déjà passé
+        setTimeout(() => {
+            if (canvas.width === 0 && video.videoWidth > 0) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                initDefaultCorners(canvas.width, canvas.height);
+                requestAnimationFrame(mainLoop);
+            }
+        }, 500);
 
         function mainLoop() {
             if (!streaming) return;
 
-            if (video.videoWidth > 0 && canvas.width !== video.videoWidth) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                initDefaultCorners(canvas.width, canvas.height);
-            }
+            if (video.readyState >= video.HAVE_CURRENT_DATA) {
+                if (canvas.width === 0 && video.videoWidth > 0) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    initDefaultCorners(canvas.width, canvas.height);
+                }
 
-            if (appState === 'CAPTURE_MARTYR' || appState === 'PRODUCTION') {
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                drawOverlay(); // L'axe X rouge est présent dès la photo martyr
-            } else if (appState === 'ADJUST_MARTYR') {
-                ctx.drawImage(martyrImage, 0, 0);
-                drawOverlay();
+                if (appState === 'CAPTURE_MARTYR' || appState === 'PRODUCTION') {
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    drawOverlay();
+                } else if (appState === 'ADJUST_MARTYR' && martyrImage) {
+                    ctx.drawImage(martyrImage, 0, 0);
+                    drawOverlay();
+                }
             }
 
             requestAnimationFrame(mainLoop);
@@ -217,7 +230,7 @@
             ctx.lineTo(canvas.width, (midLeftY + midRightY) / 2);
             ctx.stroke();
 
-            // Cadre géométrique jaune
+            // Cadre géométrique jaune/cyan
             ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -228,23 +241,22 @@
             ctx.closePath();
             ctx.stroke();
 
-            // Poignées des 4 coins
+            // Poignées des 4 coins (SG, SD, ID, IG)
             corners.forEach((p, idx) => {
                 ctx.fillStyle = (appState === 'ADJUST_MARTYR' && activeCornerIndex === idx) ? '#ff00ff' : 'yellow';
-                ctx.fillRect(p.x - 20, p.y - 20, 40, 40);
+                ctx.fillRect(p.x - 22, p.y - 22, 44, 44);
                 ctx.fillStyle = 'black';
-                ctx.font = '12px sans-serif';
-                ctx.fillText(cornerNames[idx], p.x - 8, p.y + 4);
+                ctx.font = 'bold 13px sans-serif';
+                ctx.fillText(cornerNames[idx], p.x - 11, p.y + 5);
             });
         }
 
-        // Gestion du D-Pad et des boutons d'outils
-        document.getElementById('dpad-up').addEventListener('click', () => { moveActiveCorner(0, -3); });
-        document.getElementById('dpad-down').addEventListener('click', () => { moveActiveCorner(0, 3); });
-        document.getElementById('dpad-left').addEventListener('click', () => { moveActiveCorner(-3, 0); });
-        document.getElementById('dpad-right').addEventListener('click', () => { moveActiveCorner(3, 0); });
+        // Contrôles D-Pad
+        document.getElementById('dpad-up').addEventListener('click', () => moveActiveCorner(0, -3));
+        document.getElementById('dpad-down').addEventListener('click', () => moveActiveCorner(0, 3));
+        document.getElementById('dpad-left').addEventListener('click', () => moveActiveCorner(-3, 0));
+        document.getElementById('dpad-right').addEventListener('click', () => moveActiveCorner(3, 0));
 
-        // Bouton central pour alterner le coin actif
         centerDpadBtn.addEventListener('click', () => {
             activeCornerIndex = (activeCornerIndex + 1) % 4;
             centerDpadBtn.innerText = cornerNames[activeCornerIndex];
@@ -256,7 +268,6 @@
             corners[activeCornerIndex].y += dy;
         }
 
-        // Échelle + / - (Redimensionne le bloc par rapport au centre)
         function scaleCorners(factor) {
             let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
             let cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4;
@@ -269,7 +280,6 @@
         document.getElementById('scale-plus').addEventListener('click', () => scaleCorners(1.03));
         document.getElementById('scale-minus').addEventListener('click', () => scaleCorners(0.97));
 
-        // Zoom + / -
         document.getElementById('zoom-plus').addEventListener('click', () => {
             zoomLevel = Math.min(zoomLevel + 0.1, 2.5);
             canvas.style.transform = `scale(${zoomLevel})`;
@@ -291,7 +301,7 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Ajustez les coins (Croix & Échelle), puis validez";
+                    statusMsg.innerText = "Ajustez les coins (SG, SD, ID, IG), puis validez";
                     btnAction.innerText = "✅ Valider l'étalonnage";
                     controlPanel.style.display = 'flex';
                 };
@@ -300,7 +310,7 @@
                 statusMsg.innerText = "🎯 Mode Production actif - Axe X & Échelle verrouillés";
                 btnAction.style.display = 'none';
                 controlPanel.style.display = 'none';
-                canvas.style.transform = 'scale(1)'; // Reset zoom visuel pour la production
+                canvas.style.transform = 'scale(1)';
                 btnLeft.style.display = 'block';
                 btnRight.style.display = 'block';
             }
