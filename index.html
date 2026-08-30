@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Calibration & Production</title>
+    <title>Acuitix Optix - Calibration & Navigation</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
         #app-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         #videoInput { display: none; }
-        #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
+        #canvasOutput { width: 100%; height: 100%; display: block; }
 
         .ui-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
@@ -29,28 +29,43 @@
 
         #control-panel {
             position: absolute; bottom: 80px; width: 100%; display: none;
-            justify-content: space-around; align-items: center; padding: 0 20px; z-index: 25; pointer-events: none;
+            justify-content: space-around; align-items: center; padding: 0 10px; z-index: 25; pointer-events: none;
         }
         .interactive-ui { pointer-events: auto; }
 
+        /* D-Pad Coins */
         .dpad {
-            position: relative; width: 120px; height: 120px; background: rgba(50,50,50,0.85);
+            position: relative; width: 110px; height: 110px; background: rgba(50,50,50,0.85);
             border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
         .dpad button {
             position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer;
         }
-        .dpad-up { top: 5px; left: 40px; width: 40px; height: 35px; border-radius: 6px 6px 0 0; }
-        .dpad-down { bottom: 5px; left: 40px; width: 40px; height: 35px; border-radius: 0 0 6px 6px; }
-        .dpad-left { top: 40px; left: 5px; width: 35px; height: 40px; border-radius: 6px 0 0 6px; }
-        .dpad-right { top: 40px; right: 5px; width: 35px; height: 40px; border-radius: 0 6px 6px 0; }
-        .dpad-center { top: 40px; left: 40px; width: 40px; height: 40px; background: #007bff; border-radius: 50%; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+        .dpad-up { top: 4px; left: 35px; width: 40px; height: 32px; border-radius: 6px 6px 0 0; }
+        .dpad-down { bottom: 4px; left: 35px; width: 40px; height: 32px; border-radius: 0 0 6px 6px; }
+        .dpad-left { top: 35px; left: 4px; width: 32px; height: 40px; border-radius: 6px 0 0 6px; }
+        .dpad-right { top: 35px; right: 4px; width: 32px; height: 40px; border-radius: 0 6px 6px 0; }
+        .dpad-center { top: 35px; left: 35px; width: 40px; height: 40px; background: #007bff; border-radius: 50%; font-size: 11px; display: flex; align-items: center; justify-content: center; }
 
-        .tools-group { display: flex; flex-direction: column; gap: 8px; }
-        .tool-row { display: flex; gap: 8px; }
+        /* Panneau de navigation Pano 4 axes */
+        .pan-pad {
+            position: relative; width: 110px; height: 110px; background: rgba(30,30,50,0.85);
+            border-radius: 50%; border: 2px solid #55a; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .pan-pad button {
+            position: absolute; background: #335; color: white; border: 1px solid #668; font-weight: bold; cursor: pointer;
+        }
+        .pan-up { top: 4px; left: 35px; width: 40px; height: 32px; border-radius: 6px 6px 0 0; }
+        .pan-down { bottom: 4px; left: 35px; width: 40px; height: 32px; border-radius: 0 0 6px 6px; }
+        .pan-left { top: 35px; left: 4px; width: 32px; height: 40px; border-radius: 6px 0 0 6px; }
+        .pan-right { top: 35px; right: 4px; width: 32px; height: 40px; border-radius: 0 6px 6px 0; }
+        .pan-center { top: 35px; left: 35px; width: 40px; height: 40px; background: #17a2b8; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+
+        .tools-group { display: flex; flex-direction: column; gap: 6px; }
+        .tool-row { display: flex; gap: 6px; }
         .tool-btn {
             background: rgba(30,30,30,0.9); color: white; border: 1px solid #777;
-            padding: 10px 14px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;
+            padding: 8px 10px; border-radius: 6px; font-weight: bold; font-size: 12px; cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.4);
         }
 
@@ -84,13 +99,28 @@
     <div id="status-msg">Étape 1 : Prenez la photo martyr guidé par l'axe X</div>
 
     <div id="control-panel">
+        <!-- Groupe Outils (Zoom / Échelle) -->
         <div class="tools-group interactive-ui">
+            <div class="tool-row">
+                <button class="tool-btn" id="zoom-plus">Zoom +</button>
+                <button class="tool-btn" id="zoom-minus">Zoom -</button>
+            </div>
             <div class="tool-row">
                 <button class="tool-btn" id="scale-plus">Échelle +</button>
                 <button class="tool-btn" id="scale-minus">Échelle -</button>
             </div>
         </div>
 
+        <!-- Pad de Navigation 4 axes (Panoramique) -->
+        <div class="pan-pad interactive-ui">
+            <button class="pan-up" id="pan-up">▲</button>
+            <button class="pan-down" id="pan-down">▼</button>
+            <button class="pan-left" id="pan-left">◀</button>
+            <button class="pan-right" id="pan-right">▶</button>
+            <div class="pan-center">PAN</div>
+        </div>
+
+        <!-- D-Pad Déplacement des coins (SG, SD, ID, IG) -->
         <div class="dpad interactive-ui">
             <button class="dpad-up" id="dpad-up">▲</button>
             <button class="dpad-down" id="dpad-down">▼</button>
@@ -142,6 +172,11 @@
         let activeCornerIndex = 0; // 0: SG, 1: SD, 2: ID, 3: IG
         const cornerNames = ['SG', 'SD', 'ID', 'IG'];
 
+        // Variables de navigation (Zoom et Panoramique)
+        let zoomLevel = 1.0;
+        let panX = 0;
+        let panY = 0;
+
         function checkOrientation() {
             if (window.innerHeight > window.innerWidth) {
                 warningScreen.style.display = 'flex';
@@ -153,8 +188,16 @@
         window.addEventListener('orientationchange', checkOrientation);
         checkOrientation();
 
+        function resizeCanvasToDisplay() {
+            let displayWidth = window.innerWidth;
+            let displayHeight = window.innerHeight;
+            if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+                canvas.width = displayWidth;
+                canvas.height = displayHeight;
+            }
+        }
+
         function initDefaultCorners(w, h) {
-            // Charger depuis le localStorage (JSON) si disponible pour le magnétisme/mémoire
             let savedConfig = localStorage.getItem('acuitix_config');
             if (savedConfig) {
                 try {
@@ -180,48 +223,53 @@
                 video.srcObject = stream;
                 video.play();
                 streaming = true;
+                initDefaultCorners(window.innerWidth, window.innerHeight);
+                requestAnimationFrame(mainLoop);
             })
             .catch(err => alert("Erreur caméra : " + err.message));
 
-        video.addEventListener('loadedmetadata', () => {
-            canvas.width = video.videoWidth || window.innerWidth;
-            canvas.height = video.videoHeight || window.innerHeight;
-            initDefaultCorners(canvas.width, canvas.height);
-            requestAnimationFrame(mainLoop);
-        });
+        // Fonction anti-distorsion (reproduit object-fit: cover dans le canvas)
+        function drawCover(source) {
+            let cw = canvas.width;
+            let ch = canvas.height;
+            let sw = source.videoWidth || source.width;
+            let sh = source.videoHeight || source.height;
+            if (!sw || !sh) return;
 
-        setTimeout(() => {
-            if (canvas.width === 0 && video.videoWidth > 0) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                initDefaultCorners(canvas.width, canvas.height);
-                requestAnimationFrame(mainLoop);
-            }
-        }, 500);
+            let hRatio = cw / sw;
+            let vRatio = ch / sh;
+            let ratio = Math.max(hRatio, vRatio);
+            let centerShiftX = (cw - sw * ratio) / 2;
+            let centerShiftY = (ch - sh * ratio) / 2;
+
+            ctx.drawImage(source, 0, 0, sw, sh, centerShiftX, centerShiftY, sw * ratio, sh * ratio);
+        }
 
         function mainLoop() {
             if (!streaming) return;
+            resizeCanvasToDisplay();
 
             if (video.readyState >= video.HAVE_CURRENT_DATA) {
-                if (canvas.width === 0 && video.videoWidth > 0) {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                    initDefaultCorners(canvas.width, canvas.height);
-                }
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Application du zoom et du panoramique (navigation 4 axes)
+                ctx.translate(canvas.width / 2 + panX, canvas.height / 2 + panY);
+                ctx.scale(zoomLevel, zoomLevel);
+                ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
                 if (appState === 'CAPTURE_MARTYR') {
-                    // Étape 1 : Uniquement le flux vidéo et l'axe X rouge central
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    drawCover(video);
                     drawXAxisOnly();
                 } else if (appState === 'ADJUST_MARTYR' && martyrImage) {
-                    // Étape 2 : Image martyr figée avec axe X et cadre d'étalonnage complet
-                    ctx.drawImage(martyrImage, 0, 0);
+                    drawCover(martyrImage);
                     drawOverlay();
                 } else if (appState === 'PRODUCTION') {
-                    // Étape 4 : Production avec flux vidéo, axe X et cadre configuré
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    drawCover(video);
                     drawOverlay();
                 }
+
+                ctx.restore();
             }
 
             requestAnimationFrame(mainLoop);
@@ -269,7 +317,7 @@
             });
         }
 
-        // Contrôles D-Pad
+        // Contrôles D-Pad Coins
         document.getElementById('dpad-up').addEventListener('click', () => moveActiveCorner(0, -3));
         document.getElementById('dpad-down').addEventListener('click', () => moveActiveCorner(0, 3));
         document.getElementById('dpad-left').addEventListener('click', () => moveActiveCorner(-3, 0));
@@ -285,6 +333,19 @@
             corners[activeCornerIndex].x += dx;
             corners[activeCornerIndex].y += dy;
         }
+
+        // Contrôles Panoramiques (Navigation 4 axes dans l'image)
+        document.getElementById('pan-up').addEventListener('click', () => { panY += 25; });
+        document.getElementById('pan-down').addEventListener('click', () => { panY -= 25; });
+        document.getElementById('pan-left').addEventListener('click', () => { panX += 25; });
+        document.getElementById('pan-right').addEventListener('click', () => { panX -= 25; });
+
+        // Zoom & Échelle
+        document.getElementById('zoom-plus').addEventListener('click', () => { zoomLevel = Math.min(zoomLevel + 0.2, 3.0); });
+        document.getElementById('zoom-minus').addEventListener('click', () => { 
+            zoomLevel = Math.max(zoomLevel - 0.2, 1.0); 
+            if (zoomLevel === 1.0) { panX = 0; panY = 0; }
+        });
 
         function scaleCorners(factor) {
             let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
@@ -304,24 +365,26 @@
                 tempCanvas.width = canvas.width;
                 tempCanvas.height = canvas.height;
                 let tCtx = tempCanvas.getContext('2d');
-                tCtx.drawImage(video, 0, 0);
+                tCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
                 
                 martyrImage = new Image();
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Étape 2 : Ajustez le cadre (SG, SD, ID, IG) puis validez";
+                    statusMsg.innerText = "Étape 2 : Ajustez le cadre et naviguez avec PAN";
                     btnAction.innerText = "✅ Valider l'étalonnage";
                     controlPanel.style.display = 'flex';
                 };
             } else if (appState === 'ADJUST_MARTYR') {
-                // Sauvegarde de la configuration en JSON (localStorage) pour le magnétisme / mémoire
                 localStorage.setItem('acuitix_config', JSON.stringify(corners));
 
                 appState = 'PRODUCTION';
                 statusMsg.innerText = "🎯 Mode Production actif (Étalonnage mémorisé)";
                 btnAction.style.display = 'none';
                 controlPanel.style.display = 'none';
+                zoomLevel = 1.0;
+                panX = 0;
+                panY = 0;
                 btnLeft.style.display = 'block';
                 btnRight.style.display = 'block';
             }
@@ -332,34 +395,38 @@
 
         function handleProductionCapture() {
             let origCanvas = document.createElement('canvas');
-            origCanvas.width = video.videoWidth;
-            origCanvas.height = video.videoHeight;
+            origCanvas.width = video.videoWidth || canvas.width;
+            origCanvas.height = video.videoHeight || canvas.height;
             let origCtx = origCanvas.getContext('2d');
-            origCtx.drawImage(video, 0, 0);
+            origCtx.drawImage(video, 0, 0, origCanvas.width, origCanvas.height);
             lastCapturedOriginal = origCanvas.toDataURL('image/png');
 
             let layerCanvas = document.createElement('canvas');
-            layerCanvas.width = video.videoWidth;
-            layerCanvas.height = video.videoHeight;
+            layerCanvas.width = origCanvas.width;
+            layerCanvas.height = origCanvas.height;
             let layerCtx = layerCanvas.getContext('2d');
             layerCtx.drawImage(origCanvas, 0, 0);
 
+            let scaleFactorX = layerCanvas.width / canvas.width;
+            let scaleFactorY = layerCanvas.height / canvas.height;
+
             let midLeftY = (corners[0].y + corners[3].y) / 2;
             let midRightY = (corners[1].y + corners[2].y) / 2;
+
             layerCtx.strokeStyle = 'red';
-            layerCtx.lineWidth = 4;
+            layerCtx.lineWidth = 4 * scaleFactorX;
             layerCtx.beginPath();
-            layerCtx.moveTo(0, (midLeftY + midRightY) / 2);
-            layerCtx.lineTo(layerCanvas.width, (midLeftY + midRightY) / 2);
+            layerCtx.moveTo(0, ((midLeftY + midRightY) / 2) * scaleFactorY);
+            layerCtx.lineTo(layerCanvas.width, ((midLeftY + midRightY) / 2) * scaleFactorY);
             layerCtx.stroke();
 
             layerCtx.strokeStyle = 'yellow';
-            layerCtx.lineWidth = 4;
+            layerCtx.lineWidth = 4 * scaleFactorX;
             layerCtx.beginPath();
-            layerCtx.moveTo(corners[0].x, corners[0].y);
-            layerCtx.lineTo(corners[1].x, corners[1].y);
-            layerCtx.lineTo(corners[2].x, corners[2].y);
-            layerCtx.lineTo(corners[3].x, corners[3].y);
+            layerCtx.moveTo(corners[0].x * scaleFactorX, corners[0].y * scaleFactorY);
+            layerCtx.lineTo(corners[1].x * scaleFactorX, corners[1].y * scaleFactorY);
+            layerCtx.lineTo(corners[2].x * scaleFactorX, corners[2].y * scaleFactorY);
+            layerCtx.lineTo(corners[3].x * scaleFactorX, corners[3].y * scaleFactorY);
             layerCtx.closePath();
             layerCtx.stroke();
 
