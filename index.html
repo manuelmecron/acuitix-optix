@@ -109,7 +109,6 @@
     <div class="central-marker" id="marker-right">C-D</div>
 
     <div id="control-panel">
-        <!-- Groupe Zoom -->
         <div class="tools-group interactive-ui">
             <div class="tool-row">
                 <button class="tool-btn" id="zoom-plus">Zoom +</button>
@@ -120,7 +119,6 @@
             </div>
         </div>
 
-        <!-- Pad de Navigation 4 axes (PAN) -->
         <div class="pan-pad interactive-ui">
             <button class="pan-up" id="pan-up">▲</button>
             <button class="pan-down" id="pan-down">▼</button>
@@ -129,7 +127,6 @@
             <div class="pan-center">PAN</div>
         </div>
 
-        <!-- D-Pad Déplacement précis du repère actif -->
         <div class="dpad interactive-ui">
             <button class="dpad-up" id="dpad-up">▲</button>
             <button class="dpad-down" id="dpad-down">▼</button>
@@ -189,7 +186,7 @@
             corners: [] 
         };
 
-        let activeMarkerIndex = 0; // 0: C-G, 1: C-D
+        let activeMarkerIndex = 0; 
         let zoomLevel = 1.0;
         let panX = 0;
         let panY = 0;
@@ -260,14 +257,24 @@
             }
 
             calibrationConfig.corners = [
-                rot(-hw, -hh), // SG
-                rot(hw, -hh),  // SD
-                rot(hw, hh),   // ID
-                rot(-hw, hh)   // IG
+                rot(-hw, -hh), 
+                rot(hw, -hh),  
+                rot(hw, hh),   
+                rot(-hw, hh)   
             ];
         }
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+        // Forçage explicite du flux vidéo en résolution paysage (width > height)
+        const constraints = {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            },
+            audio: false
+        };
+
+        navigator.mediaDevices.getUserMedia(constraints)
             .then(stream => {
                 video.srcObject = stream;
                 video.play();
@@ -275,7 +282,18 @@
                 initDefaultMarkers(window.innerWidth, window.innerHeight);
                 requestAnimationFrame(mainLoop);
             })
-            .catch(err => alert("Erreur caméra : " + err.message));
+            .catch(err => {
+                // Fallback souple si la résolution idéale échoue sur certains appareils mobiles
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+                    .then(stream => {
+                        video.srcObject = stream;
+                        video.play();
+                        streaming = true;
+                        initDefaultMarkers(window.innerWidth, window.innerHeight);
+                        requestAnimationFrame(mainLoop);
+                    })
+                    .catch(e => alert("Erreur caméra : " + e.message));
+            });
 
         function drawCover(source) {
             let cw = canvas.width;
@@ -290,7 +308,7 @@
             let centerShiftX = (cw - sw * ratio) / 2;
             let centerShiftY = (ch - sh * ratio) / 2;
 
-            ctx.drawImage(source, 0, 0, sw, sw * ratio > cw ? sw : cw / ratio, sh, centerShiftX, centerShiftY, sw * ratio, sh * ratio);
+            ctx.drawImage(source, 0, 0, sw, sh, centerShiftX, centerShiftY, sw * ratio, sh * ratio);
         }
 
         function updateMarkersDOM() {
@@ -305,7 +323,6 @@
 
             keys.forEach((key, idx) => {
                 let pt = calibrationConfig[key];
-                // Prise en compte du zoom et du pan pour l'affichage des éléments HTML HTML
                 let screenX = (pt.x - canvas.width / 2) * zoomLevel + canvas.width / 2 + panX;
                 let screenY = (pt.y - canvas.height / 2) * zoomLevel + canvas.height / 2 + panY;
                 
@@ -369,7 +386,6 @@
         }
 
         function drawOverlay() {
-            // Axe X complet ou reliant les repères
             let cl = calibrationConfig.centerLeft;
             let cr = calibrationConfig.centerRight;
             let dx = cr.x - cl.x;
@@ -378,7 +394,6 @@
             let cx = (cl.x + cr.x) / 2;
             let cy = (cl.y + cr.y) / 2;
 
-            // Traçage de l'axe X étendu à toute la largeur du canvas
             ctx.strokeStyle = 'red';
             ctx.lineWidth = 4;
             ctx.beginPath();
@@ -387,7 +402,6 @@
             ctx.lineTo(cx + Math.cos(angle) * extend, cy + Math.sin(angle) * extend);
             ctx.stroke();
 
-            // Cadre Étalon 11
             let c = calibrationConfig.corners;
             if (c.length === 4) {
                 ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
@@ -402,7 +416,6 @@
             }
         }
 
-        // Glisser-déposer tactile des repères
         ['left', 'right'].forEach((side, idx) => {
             let el = document.getElementById('marker-' + side);
             
@@ -438,7 +451,6 @@
             });
         });
 
-        // Commandes D-Pad (Ajustement fin)
         function moveActiveMarker(dx, dy) {
             if (appState !== 'ADJUST_MARTYR') return;
             let target = activeMarkerIndex === 0 ? calibrationConfig.centerLeft : calibrationConfig.centerRight;
@@ -456,13 +468,11 @@
             centerDpadBtn.innerText = activeMarkerIndex === 0 ? 'C-G' : 'C-D';
         });
 
-        // Navigation PAN
         document.getElementById('pan-up').addEventListener('click', () => { panY += 30; });
         document.getElementById('pan-down').addEventListener('click', () => { panY -= 30; });
         document.getElementById('pan-left').addEventListener('click', () => { panX += 30; });
         document.getElementById('pan-right').addEventListener('click', () => { panX -= 30; });
 
-        // Zoom & Centrage
         document.getElementById('zoom-plus').addEventListener('click', () => { zoomLevel = Math.min(zoomLevel + 0.2, 3.0); });
         document.getElementById('zoom-minus').addEventListener('click', () => { 
             zoomLevel = Math.max(zoomLevel - 0.2, 1.0); 
@@ -473,8 +483,8 @@
         btnAction.addEventListener('click', () => {
             if (appState === 'CAPTURE_MARTYR') {
                 let tempCanvas = document.createElement('canvas');
-                tempCanvas.width = video.videoWidth || 1280;
-                tempCanvas.height = video.videoHeight || 720;
+                tempCanvas.width = video.videoWidth || 1920;
+                tempCanvas.height = video.videoHeight || 1080;
                 let tCtx = tempCanvas.getContext('2d');
                 tCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
                 
@@ -507,8 +517,8 @@
 
         function handleProductionCapture() {
             let origCanvas = document.createElement('canvas');
-            origCanvas.width = video.videoWidth || 1280;
-            origCanvas.height = video.videoHeight || 720;
+            origCanvas.width = video.videoWidth || 1920;
+            origCanvas.height = video.videoHeight || 1080;
             let origCtx = origCanvas.getContext('2d');
             origCtx.drawImage(video, 0, 0, origCanvas.width, origCanvas.height);
             lastCapturedOriginal = origCanvas.toDataURL('image/png');
@@ -562,7 +572,6 @@
 
             let vc = [vRot(-hw, -hh), vRot(hw, -hh), vRot(hw, hh), vRot(-hw, hh)];
 
-            // Tracé de l'axe X complet sur l'export haute résolution
             layerCtx.strokeStyle = 'red';
             layerCtx.lineWidth = Math.max(2, 4 / ratio);
             let extend = 10000;
@@ -571,7 +580,6 @@
             layerCtx.lineTo(vCx + Math.cos(vAngle) * extend, vCy + Math.sin(vAngle) * extend);
             layerCtx.stroke();
 
-            // Tracé du cadre jaune Étalon 11 sur l'export haute résolution
             layerCtx.strokeStyle = 'yellow';
             layerCtx.lineWidth = Math.max(2, 4 / ratio);
             layerCtx.beginPath();
