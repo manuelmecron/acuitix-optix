@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Calibration Étalon 11 & JSON</title>
+    <title>Acuitix Optix - Calibration Étalon 11 & Navigation</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
@@ -29,24 +29,50 @@
 
         #control-panel {
             position: absolute; bottom: 80px; width: 100%; display: none;
-            justify-content: center; gap: 15px; align-items: center; padding: 0 10px; z-index: 25; pointer-events: none;
+            justify-content: space-around; align-items: center; padding: 0 10px; z-index: 25; pointer-events: none;
         }
         .interactive-ui { pointer-events: auto; touch-action: auto; }
 
         .central-marker {
-            position: absolute; width: 50px; height: 50px; border: 2px dashed #ff00ff;
-            background: rgba(255, 235, 59, 0.4); color: black; font-weight: bold; font-size: 11px;
-            display: none; align-items: center; justify-content: center;
+            position: absolute; width: 50px; height: 50px; border: 2px solid #333;
+            font-weight: bold; font-size: 12px; display: none; align-items: center; justify-content: center;
             cursor: pointer; z-index: 26; box-shadow: 0 2px 6px rgba(0,0,0,0.5); user-select: none;
-            touch-action: none; border-radius: 4px;
+            touch-action: none; border-radius: 6px; background: #ffeb3b; color: black;
         }
-        #marker-left { background: rgba(255, 235, 59, 0.7); }
-        #marker-right { background: rgba(255, 235, 59, 0.7); }
 
-        .tools-group { display: flex; gap: 10px; }
+        /* D-Pad / Croix de réglage fin */
+        .dpad {
+            position: relative; width: 100px; height: 100px; background: rgba(50,50,50,0.85);
+            border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .dpad button {
+            position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer; touch-action: auto;
+        }
+        .dpad-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
+        .dpad-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
+        .dpad-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
+        .dpad-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
+        .dpad-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; touch-action: auto; color: white; }
+
+        /* Panneau de navigation 4 axes (PAN) */
+        .pan-pad {
+            position: relative; width: 100px; height: 100px; background: rgba(30,30,50,0.85);
+            border-radius: 50%; border: 2px solid #55a; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .pan-pad button {
+            position: absolute; background: #335; color: white; border: 1px solid #668; font-weight: bold; cursor: pointer; touch-action: auto;
+        }
+        .pan-up { top: 3px; left: 32px; width: 36px; height: 30px; border-radius: 6px 6px 0 0; }
+        .pan-down { bottom: 3px; left: 32px; width: 36px; height: 30px; border-radius: 0 0 6px 6px; }
+        .pan-left { top: 32px; left: 3px; width: 30px; height: 36px; border-radius: 6px 0 0 6px; }
+        .pan-right { top: 32px; right: 3px; width: 30px; height: 36px; border-radius: 0 6px 6px 0; }
+        .pan-center { top: 32px; left: 32px; width: 36px; height: 36px; background: #17a2b8; border-radius: 50%; font-size: 9px; display: flex; align-items: center; justify-content: center; touch-action: auto; color: white; }
+
+        .tools-group { display: flex; flex-direction: column; gap: 5px; }
+        .tool-row { display: flex; gap: 5px; }
         .tool-btn {
             background: rgba(30,30,30,0.9); color: white; border: 1px solid #777;
-            padding: 10px 14px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;
+            padding: 6px 10px; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer;
             box-shadow: 0 2px 5px rgba(0,0,0,0.4); touch-action: auto;
         }
 
@@ -83,10 +109,33 @@
     <div class="central-marker" id="marker-right">C-D</div>
 
     <div id="control-panel">
+        <!-- Groupe Zoom -->
         <div class="tools-group interactive-ui">
-            <button class="tool-btn" id="zoom-plus">🔍 Zoom +</button>
-            <button class="tool-btn" id="zoom-minus">🔍 Zoom -</button>
-            <button class="tool-btn" id="reset-view" style="background: #555;">🔄 Centrer</button>
+            <div class="tool-row">
+                <button class="tool-btn" id="zoom-plus">Zoom +</button>
+                <button class="tool-btn" id="zoom-minus">Zoom -</button>
+            </div>
+            <div class="tool-row">
+                <button class="tool-btn" id="reset-view" style="background:#555; width:100%;">Centrer</button>
+            </div>
+        </div>
+
+        <!-- Pad de Navigation 4 axes (PAN) -->
+        <div class="pan-pad interactive-ui">
+            <button class="pan-up" id="pan-up">▲</button>
+            <button class="pan-down" id="pan-down">▼</button>
+            <button class="pan-left" id="pan-left">◀</button>
+            <button class="pan-right" id="pan-right">▶</button>
+            <div class="pan-center">PAN</div>
+        </div>
+
+        <!-- D-Pad Déplacement précis du repère actif -->
+        <div class="dpad interactive-ui">
+            <button class="dpad-up" id="dpad-up">▲</button>
+            <button class="dpad-down" id="dpad-down">▼</button>
+            <button class="dpad-left" id="dpad-left">◀</button>
+            <button class="dpad-right" id="dpad-right">▶</button>
+            <button class="dpad-center" id="dpad-center">C-G</button>
         </div>
     </div>
 
@@ -110,11 +159,9 @@
     </div>
 
     <script>
-        // --- COTES OFFICIELLES DE L'ÉTALON 11 ---
-        // Modifiez ces multiplicateurs ou valeurs fixes selon les dimensions exactes de votre plan
         const ETALON_SPECS = {
-            widthRatioFromCenters: 1.6, // Rapport entre la largeur totale de l'étalon et l'entraxe mesuré C_G / C_D
-            heightRatioFromCenters: 0.9 // Rapport de hauteur totale par rapport à l'entraxe
+            widthRatioFromCenters: 1.6,
+            heightRatioFromCenters: 0.9
         };
 
         let video = document.getElementById('videoInput');
@@ -126,6 +173,7 @@
         let btnRight = document.getElementById('btn-right');
         let controlPanel = document.getElementById('control-panel');
         let warningScreen = document.getElementById('landscape-warning');
+        let centerDpadBtn = document.getElementById('dpad-center');
 
         let previewModal = document.getElementById('preview-modal');
         let previewCanvas = document.getElementById('preview-canvas');
@@ -141,6 +189,7 @@
             corners: [] 
         };
 
+        let activeMarkerIndex = 0; // 0: C-G, 1: C-D
         let zoomLevel = 1.0;
         let panX = 0;
         let panY = 0;
@@ -192,7 +241,6 @@
             let distance = Math.sqrt(dx * dx + dy * dy);
             let angle = Math.atan2(dy, dx);
 
-            // Application rigoureuse des cotes de l'Étalon 11
             let frameWidth = distance * ETALON_SPECS.widthRatioFromCenters; 
             let frameHeight = distance * ETALON_SPECS.heightRatioFromCenters; 
 
@@ -242,7 +290,7 @@
             let centerShiftX = (cw - sw * ratio) / 2;
             let centerShiftY = (ch - sh * ratio) / 2;
 
-            ctx.drawImage(source, 0, 0, sw, sh, centerShiftX, centerShiftY, sw * ratio, sh * ratio);
+            ctx.drawImage(source, 0, 0, sw, sw * ratio > cw ? sw : cw / ratio, sh, centerShiftX, centerShiftY, sw * ratio, sh * ratio);
         }
 
         function updateMarkersDOM() {
@@ -252,16 +300,30 @@
                 return;
             }
 
-            ['Left', 'Right'].forEach(side => {
-                let pt = calibrationConfig['center' + side];
+            const keys = ['centerLeft', 'centerRight'];
+            const ids = ['marker-left', 'marker-right'];
+
+            keys.forEach((key, idx) => {
+                let pt = calibrationConfig[key];
+                // Prise en compte du zoom et du pan pour l'affichage des éléments HTML HTML
                 let screenX = (pt.x - canvas.width / 2) * zoomLevel + canvas.width / 2 + panX;
                 let screenY = (pt.y - canvas.height / 2) * zoomLevel + canvas.height / 2 + panY;
                 
-                let el = document.getElementById('marker-' + side.toLowerCase());
+                let el = document.getElementById(ids[idx]);
                 if (el) {
                     el.style.display = 'flex';
                     el.style.left = (screenX - 25) + 'px';
                     el.style.top = (screenY - 25) + 'px';
+                    
+                    if (idx === activeMarkerIndex) {
+                        el.style.borderColor = '#ff00ff';
+                        el.style.borderWidth = '3px';
+                        el.style.background = 'rgba(255, 0, 255, 0.3)';
+                    } else {
+                        el.style.borderColor = '#333';
+                        el.style.borderWidth = '2px';
+                        el.style.background = 'rgba(255, 235, 59, 0.7)';
+                    }
                 }
             });
         }
@@ -307,13 +369,25 @@
         }
 
         function drawOverlay() {
+            // Axe X complet ou reliant les repères
+            let cl = calibrationConfig.centerLeft;
+            let cr = calibrationConfig.centerRight;
+            let dx = cr.x - cl.x;
+            let dy = cr.y - cl.y;
+            let angle = Math.atan2(dy, dx);
+            let cx = (cl.x + cr.x) / 2;
+            let cy = (cl.y + cr.y) / 2;
+
+            // Traçage de l'axe X étendu à toute la largeur du canvas
             ctx.strokeStyle = 'red';
             ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.moveTo(calibrationConfig.centerLeft.x, calibrationConfig.centerLeft.y);
-            ctx.lineTo(calibrationConfig.centerRight.x, calibrationConfig.centerRight.y);
+            let extend = 5000;
+            ctx.moveTo(cx - Math.cos(angle) * extend, cy - Math.sin(angle) * extend);
+            ctx.lineTo(cx + Math.cos(angle) * extend, cy + Math.sin(angle) * extend);
             ctx.stroke();
 
+            // Cadre Étalon 11
             let c = calibrationConfig.corners;
             if (c.length === 4) {
                 ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
@@ -328,19 +402,19 @@
             }
         }
 
-        let activeDraggingMarker = null;
-
-        ['Left', 'Right'].forEach(side => {
-            let el = document.getElementById('marker-' + side.toLowerCase());
+        // Glisser-déposer tactile des repères
+        ['left', 'right'].forEach((side, idx) => {
+            let el = document.getElementById('marker-' + side);
             
             el.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
-                activeDraggingMarker = side;
+                activeMarkerIndex = idx;
+                centerDpadBtn.innerText = idx === 0 ? 'C-G' : 'C-D';
                 el.setPointerCapture(e.pointerId);
             });
 
             el.addEventListener('pointermove', (e) => {
-                if (activeDraggingMarker === side) {
+                if (el.hasPointerCapture(e.pointerId)) {
                     e.preventDefault();
                     let rect = canvas.getBoundingClientRect();
                     let clientX = e.clientX - rect.left;
@@ -349,19 +423,46 @@
                     let canvasX = (clientX - canvas.width / 2 - panX) / zoomLevel + canvas.width / 2;
                     let canvasY = (clientY - canvas.height / 2 - panY) / zoomLevel + canvas.height / 2;
                     
-                    calibrationConfig['center' + side].x = canvasX;
-                    calibrationConfig['center' + side].y = canvasY;
+                    if (idx === 0) {
+                        calibrationConfig.centerLeft.x = canvasX;
+                        calibrationConfig.centerLeft.y = canvasY;
+                    } else {
+                        calibrationConfig.centerRight.x = canvasX;
+                        calibrationConfig.centerRight.y = canvasY;
+                    }
                 }
             });
 
             el.addEventListener('pointerup', (e) => {
-                if (activeDraggingMarker === side) {
-                    activeDraggingMarker = null;
-                    try { el.releasePointerCapture(e.pointerId); } catch(err){}
-                }
+                try { el.releasePointerCapture(e.pointerId); } catch(err){}
             });
         });
 
+        // Commandes D-Pad (Ajustement fin)
+        function moveActiveMarker(dx, dy) {
+            if (appState !== 'ADJUST_MARTYR') return;
+            let target = activeMarkerIndex === 0 ? calibrationConfig.centerLeft : calibrationConfig.centerRight;
+            target.x += dx;
+            target.y += dy;
+        }
+
+        document.getElementById('dpad-up').addEventListener('click', () => moveActiveMarker(0, -2));
+        document.getElementById('dpad-down').addEventListener('click', () => moveActiveMarker(0, 2));
+        document.getElementById('dpad-left').addEventListener('click', () => moveActiveMarker(-2, 0));
+        document.getElementById('dpad-right').addEventListener('click', () => moveActiveMarker(2, 0));
+
+        centerDpadBtn.addEventListener('click', () => {
+            activeMarkerIndex = (activeMarkerIndex + 1) % 2;
+            centerDpadBtn.innerText = activeMarkerIndex === 0 ? 'C-G' : 'C-D';
+        });
+
+        // Navigation PAN
+        document.getElementById('pan-up').addEventListener('click', () => { panY += 30; });
+        document.getElementById('pan-down').addEventListener('click', () => { panY -= 30; });
+        document.getElementById('pan-left').addEventListener('click', () => { panX += 30; });
+        document.getElementById('pan-right').addEventListener('click', () => { panX -= 30; });
+
+        // Zoom & Centrage
         document.getElementById('zoom-plus').addEventListener('click', () => { zoomLevel = Math.min(zoomLevel + 0.2, 3.0); });
         document.getElementById('zoom-minus').addEventListener('click', () => { 
             zoomLevel = Math.max(zoomLevel - 0.2, 1.0); 
@@ -381,7 +482,7 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Étape 2 : Positionnez les repères centraux de l'Étalon 11";
+                    statusMsg.innerText = "Étape 2 : Ajustez C-G / C-D via le PAN et le D-Pad";
                     btnAction.innerText = "✅ Valider et générer JSON";
                     controlPanel.style.display = 'flex';
                 };
@@ -461,13 +562,16 @@
 
             let vc = [vRot(-hw, -hh), vRot(hw, -hh), vRot(hw, hh), vRot(-hw, hh)];
 
+            // Tracé de l'axe X complet sur l'export haute résolution
             layerCtx.strokeStyle = 'red';
             layerCtx.lineWidth = Math.max(2, 4 / ratio);
+            let extend = 10000;
             layerCtx.beginPath();
-            layerCtx.moveTo(vCl.x, vCl.y);
-            layerCtx.lineTo(vCr.x, vCr.y);
+            layerCtx.moveTo(vCx - Math.cos(vAngle) * extend, vCy - Math.sin(vAngle) * extend);
+            layerCtx.lineTo(vCx + Math.cos(vAngle) * extend, vCy + Math.sin(vAngle) * extend);
             layerCtx.stroke();
 
+            // Tracé du cadre jaune Étalon 11 sur l'export haute résolution
             layerCtx.strokeStyle = 'yellow';
             layerCtx.lineWidth = Math.max(2, 4 / ratio);
             layerCtx.beginPath();
