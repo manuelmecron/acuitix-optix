@@ -3,7 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - ETALON11 Multi-Phases</title>
+    <title>Acuitix Optix - ETALON11 Fix Init</title>
+    <script>
+        // Hook obligatoire pour qu'OpenCV prévienne quand il est prêt
+        var Module = {
+            onRuntimeInitialized() {
+                console.log("OpenCV est prêt.");
+                initOpenCVObjects();
+            }
+        };
+    </script>
     <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -59,7 +68,7 @@
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <div id="status-msg">Initialisation...</div>
+    <div id="status-msg">Démarrage de la caméra...</div>
 
     <div id="preview-modal">
         <canvas id="preview-canvas"></canvas>
@@ -92,8 +101,8 @@
 
         let streaming = false;
         let detectedCorners = null;
+        let opencvReady = false;
 
-        // Profils de détection séquentielle (phases multiples)
         const hsvProfiles = [
             { name: "Normal",     h1_l: [0, 50, 50],   h1_h: [10, 255, 255], h2_l: [170, 50, 50],  h2_h: [180, 255, 255] },
             { name: "Sombre/LED", h1_l: [0, 30, 30],   h1_h: [15, 255, 255], h2_l: [165, 30, 30],  h2_h: [180, 255, 255] },
@@ -113,6 +122,23 @@
         window.addEventListener('orientationchange', checkOrientation);
         checkOrientation();
 
+        let src, hsv, mask1, mask2, mask, contours, hierarchy;
+        function initOpenCVObjects() {
+            try {
+                src = new cv.Mat();
+                hsv = new cv.Mat();
+                mask1 = new cv.Mat();
+                mask2 = new cv.Mat();
+                mask = new cv.Mat();
+                contours = new cv.MatVector();
+                hierarchy = new cv.Mat();
+                opencvReady = true;
+                statusMsg.innerText = "🔍 Recherche de l'étalon...";
+            } catch(e) {
+                console.error("Erreur init OpenCV:", e);
+            }
+        }
+
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
@@ -121,22 +147,6 @@
                 requestAnimationFrame(processFrame);
             })
             .catch(err => alert("Erreur caméra : " + err.message));
-
-        let src, hsv, mask1, mask2, mask, contours, hierarchy;
-        function initOpenCVObjects() {
-            if (typeof cv !== 'undefined' && cv.Mat) {
-                src = new cv.Mat();
-                hsv = new cv.Mat();
-                mask1 = new cv.Mat();
-                mask2 = new cv.Mat();
-                mask = new cv.Mat();
-                contours = new cv.MatVector();
-                hierarchy = new cv.Mat();
-            } else {
-                setTimeout(initOpenCVObjects, 500);
-            }
-        }
-        setTimeout(initOpenCVObjects, 1000);
 
         function processFrame() {
             if (!streaming) return;
@@ -148,7 +158,7 @@
 
             ctx.drawImage(video, 0, 0, canvasOutput.width, canvasOutput.height);
 
-            if (typeof cv !== 'undefined' && src && video.videoWidth > 0) {
+            if (opencvReady && src && video.videoWidth > 0) {
                 try {
                     let cap = new cv.VideoCapture(video);
                     cap.read(src);
@@ -174,13 +184,11 @@
 
                     cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                    let largeSquares = []; // Pour les coins 15x15
-
+                    let largeSquares = [];
                     for (let i = 0; i < contours.size(); ++i) {
                         let cnt = contours.get(i);
                         let area = cv.contourArea(cnt);
                         
-                        // Filtrer pour cibler en priorité les grands carrés d'angle (15x15)
                         if (area > 40 && area < 10000) {
                             let rect = cv.boundingRect(cnt);
                             let aspect = rect.width / rect.height;
@@ -197,13 +205,10 @@
                         }
                     }
 
-                    // On cherche à identifier les 4 plus grands carrés correspondants aux coins
                     if (largeSquares.length >= 4) {
-                        // Trier par surface décroissante pour garder les plus gros (les coins 15x15 par rapport au milieu 10x10)
                         largeSquares.sort((a, b) => b.area - a.area);
                         let corners = largeSquares.slice(0, 4);
 
-                        // Réorganiser Haut-Gauche, Haut-Droit, Bas-Droit, Bas-Gauche
                         corners.sort((a, b) => a.y - b.y);
                         let topTwo = [corners[0], corners[1]].sort((a, b) => a.x - b.x);
                         let bottomTwo = [corners[2], corners[3]].sort((a, b) => a.x - b.x);
@@ -213,7 +218,6 @@
                         statusMsg.innerText = `✅ Détecté [Phase: ${profile.name}]`;
                         statusMsg.style.color = "#28a745";
                     } else {
-                        // Échec sur cette phase -> Passage automatique à la phase suivante sur la prochaine frame
                         detectedCorners = null;
                         currentPhase = (currentPhase + 1) % hsvProfiles.length;
 
@@ -225,7 +229,7 @@
                             {x: x, y: y}, {x: x+w, y: y}, {x: x+w, y: y+h}, {x: x, y: y+h}
                         ];
                         drawLiveCorners(detectedCorners, 'orange');
-                        statusMsg.innerText = `🔄 Test phase : ${profile.name} (${largeSquares.length}/4 coins)`;
+                        statusMsg.innerText = `🔄 Phase : ${profile.name} (${largeSquares.length}/4)`;
                         statusMsg.style.color = "orange";
                     }
 
