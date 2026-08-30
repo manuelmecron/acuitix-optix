@@ -3,29 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Calibration Martyr & Production</title>
+    <title>Acuitix Optix - État Avancé D-Pad</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
-        #app-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        #app-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
-        #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
+        #canvasOutput { width: 100%; height: 100%; object-fit: cover; transform-origin: center; transition: transform 0.1s ease; }
 
-        /* Éléments d'interface et boutons */
         .ui-btn {
             position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
-            padding: 15px 25px; border-radius: 30px; font-size: 16px; font-weight: bold;
+            padding: 14px 22px; border-radius: 30px; font-size: 15px; font-weight: bold;
             cursor: pointer; z-index: 20; box-shadow: 0 4px 10px rgba(0,0,0,0.6);
         }
         #btn-action { left: 50%; transform: translateX(-50%); }
-        #btn-left { left: 30px; display: none; }
-        #btn-right { right: 30px; display: none; }
+        #btn-left { left: 20px; display: none; }
+        #btn-right { right: 20px; display: none; }
 
         #status-msg {
-            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.8); color: yellow; padding: 8px 16px;
-            border-radius: 15px; font-size: 14px; z-index: 25; font-family: monospace; text-align: center;
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.85); color: yellow; padding: 6px 14px;
+            border-radius: 15px; font-size: 13px; z-index: 25; font-family: monospace; text-align: center;
+        }
+
+        /* Panneau de contrôle D-Pad & Échelle (affiché uniquement pendant l'ajustement) */
+        #control-panel {
+            position: absolute; bottom: 80px; width: 100%; display: none;
+            justify-content: space-around; align-items: center; padding: 0 20px; z-index: 25; pointer-events: none;
+        }
+        .interactive-ui { pointer-events: auto; }
+
+        /* Croix Game Boy */
+        .dpad {
+            position: relative; width: 120px; height: 120px; background: rgba(50,50,50,0.8);
+            border-radius: 50%; border: 2px solid #777; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        .dpad button {
+            position: absolute; background: #444; color: white; border: 1px solid #666; font-weight: bold; cursor: pointer;
+        }
+        .dpad-up { top: 5px; left: 40px; width: 40px; height: 35px; border-radius: 6px 6px 0 0; }
+        .dpad-down { bottom: 5px; left: 40px; width: 40px; height: 35px; border-radius: 0 0 6px 6px; }
+        .dpad-left { top: 40px; left: 5px; width: 35px; height: 40px; border-radius: 6px 0 0 6px; }
+        .dpad-right { top: 40px; right: 5px; width: 35px; height: 40px; border-radius: 0 6px 6px 0; }
+        .dpad-center { top: 40px; left: 40px; width: 40px; height: 40px; background: #007bff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; }
+
+        /* Boutons Échelle et Zoom */
+        .tools-group { display: flex; flex-direction: column; gap: 8px; }
+        .tool-row { display: flex; gap: 8px; }
+        .tool-btn {
+            background: rgba(30,30,30,0.85); color: white; border: 1px solid #777;
+            padding: 10px 14px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
         }
 
         #landscape-warning {
@@ -55,7 +84,30 @@
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b>
     </div>
 
-    <div id="status-msg">Étape 1 : Prenez votre photo martyr de référence</div>
+    <div id="status-msg">Étape 1 : Prenez votre photo martyr (L'axe X rouge est actif)</div>
+
+    <div id="control-panel">
+        <!-- Échelle & Zoom -->
+        <div class="tools-group interactive-ui">
+            <div class="tool-row">
+                <button class="tool-btn" id="scale-plus">Échelle +</button>
+                <button class="tool-btn" id="scale-minus">Échelle -</button>
+            </div>
+            <div class="tool-row">
+                <button class="tool-btn" id="zoom-plus">Zoom +</button>
+                <button class="tool-btn" id="zoom-minus">Zoom -</button>
+            </div>
+        </div>
+
+        <!-- Croix Game Boy de réglage fin -->
+        <div class="dpad interactive-ui">
+            <button class="dpad-up" id="dpad-up">▲</button>
+            <button class="dpad-down" id="dpad-down">▼</button>
+            <button class="dpad-left" id="dpad-left">◀</button>
+            <button class="dpad-right" id="dpad-right">▶</button>
+            <button class="dpad-center" id="dpad-center">TL</button>
+        </div>
+    </div>
 
     <div id="preview-modal">
         <canvas id="preview-canvas"></canvas>
@@ -84,19 +136,21 @@
         let btnAction = document.getElementById('btn-action');
         let btnLeft = document.getElementById('btn-left');
         let btnRight = document.getElementById('btn-right');
+        let controlPanel = document.getElementById('control-panel');
         let warningScreen = document.getElementById('landscape-warning');
+        let centerDpadBtn = document.getElementById('dpad-center');
 
         let previewModal = document.getElementById('preview-modal');
         let previewCanvas = document.getElementById('preview-canvas');
-        let previewCtx = previewCanvas.getContext('2d');
 
         let appState = 'CAPTURE_MARTYR'; // CAPTURE_MARTYR -> ADJUST_MARTYR -> PRODUCTION
         let martyrImage = null;
         let streaming = false;
 
-        // Coordonnées interactives des 4 coins du gabarit (initialisées au centre par défaut)
         let corners = [];
-        let activeCornerIndex = null;
+        let activeCornerIndex = 0; // 0: TL, 1: TR, 2: BR, 3: BL
+        const cornerNames = ['TL', 'TR', 'BR', 'BL'];
+        let zoomLevel = 1.0;
 
         function checkOrientation() {
             if (window.innerHeight > window.innerWidth) {
@@ -124,10 +178,10 @@
             let cx = w / 2;
             let cy = h / 2;
             corners = [
-                {x: cx - bw/2, y: cy - bh/2}, // Haut-Gauche
-                {x: cx + bw/2, y: cy - bh/2}, // Haut-Droit
-                {x: cx + bw/2, y: cy + bh/2}, // Bas-Droit
-                {x: cx - bw/2, y: cy + bh/2}  // Bas-Gauche
+                {x: cx - bw/2, y: cy - bh/2},
+                {x: cx + bw/2, y: cy - bh/2},
+                {x: cx + bw/2, y: cy + bh/2},
+                {x: cx - bw/2, y: cy + bh/2}
             ];
         }
 
@@ -142,11 +196,8 @@
 
             if (appState === 'CAPTURE_MARTYR' || appState === 'PRODUCTION') {
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                if (appState === 'PRODUCTION') {
-                    drawOverlay();
-                }
+                drawOverlay(); // L'axe X rouge est présent dès la photo martyr
             } else if (appState === 'ADJUST_MARTYR') {
-                // Afficher l'image martyr figée avec les coins déplaçables
                 ctx.drawImage(martyrImage, 0, 0);
                 drawOverlay();
             }
@@ -155,10 +206,10 @@
         }
 
         function drawOverlay() {
-            // Axe X rouge invariable (reliant le milieu gauche au milieu droit ou calculé depuis les coins)
             let midLeftY = (corners[0].y + corners[3].y) / 2;
             let midRightY = (corners[1].y + corners[2].y) / 2;
 
+            // Axe X rouge invariable
             ctx.strokeStyle = 'red';
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -166,7 +217,7 @@
             ctx.lineTo(canvas.width, (midLeftY + midRightY) / 2);
             ctx.stroke();
 
-            // Cadre et poignées des 4 coins
+            // Cadre géométrique jaune
             ctx.strokeStyle = appState === 'ADJUST_MARTYR' ? 'cyan' : 'yellow';
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -177,56 +228,59 @@
             ctx.closePath();
             ctx.stroke();
 
-            // Dessiner les poignées tactiles carrées
+            // Poignées des 4 coins
             corners.forEach((p, idx) => {
-                ctx.fillStyle = (activeCornerIndex === idx) ? '#ff00ff' : 'yellow';
+                ctx.fillStyle = (appState === 'ADJUST_MARTYR' && activeCornerIndex === idx) ? '#ff00ff' : 'yellow';
                 ctx.fillRect(p.x - 20, p.y - 20, 40, 40);
                 ctx.fillStyle = 'black';
                 ctx.font = '12px sans-serif';
-                ctx.fillText(['TL', 'TR', 'BR', 'BL'][idx], p.x - 8, p.y + 4);
+                ctx.fillText(cornerNames[idx], p.x - 8, p.y + 4);
             });
         }
 
-        // Gestion du tactile/souris pour déplacer les coins lors de l'ajustement de la photo martyr
-        function getTouchPos(e) {
-            let rect = canvas.getBoundingClientRect();
-            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            // Adapter au ratio réel du canvas
-            let scaleX = canvas.width / rect.width;
-            let scaleY = canvas.height / rect.height;
-            return {
-                x: (clientX - rect.left) * scaleX,
-                y: (clientY - rect.top) * scaleY
-            };
-        }
+        // Gestion du D-Pad et des boutons d'outils
+        document.getElementById('dpad-up').addEventListener('click', () => { moveActiveCorner(0, -3); });
+        document.getElementById('dpad-down').addEventListener('click', () => { moveActiveCorner(0, 3); });
+        document.getElementById('dpad-left').addEventListener('click', () => { moveActiveCorner(-3, 0); });
+        document.getElementById('dpad-right').addEventListener('click', () => { moveActiveCorner(3, 0); });
 
-        canvas.addEventListener('pointerdown', (e) => {
+        // Bouton central pour alterner le coin actif
+        centerDpadBtn.addEventListener('click', () => {
+            activeCornerIndex = (activeCornerIndex + 1) % 4;
+            centerDpadBtn.innerText = cornerNames[activeCornerIndex];
+        });
+
+        function moveActiveCorner(dx, dy) {
             if (appState !== 'ADJUST_MARTYR') return;
-            let pos = getTouchPos(e);
-            // Trouver le coin le plus proche touché (rayon de 50px)
-            corners.forEach((p, idx) => {
-                let dist = Math.hypot(p.x - pos.x, p.y - pos.y);
-                if (dist < 60) {
-                    activeCornerIndex = idx;
-                }
+            corners[activeCornerIndex].x += dx;
+            corners[activeCornerIndex].y += dy;
+        }
+
+        // Échelle + / - (Redimensionne le bloc par rapport au centre)
+        function scaleCorners(factor) {
+            let cx = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
+            let cy = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4;
+            corners.forEach(p => {
+                p.x = cx + (p.x - cx) * factor;
+                p.y = cy + (p.y - cy) * factor;
             });
+        }
+
+        document.getElementById('scale-plus').addEventListener('click', () => scaleCorners(1.03));
+        document.getElementById('scale-minus').addEventListener('click', () => scaleCorners(0.97));
+
+        // Zoom + / -
+        document.getElementById('zoom-plus').addEventListener('click', () => {
+            zoomLevel = Math.min(zoomLevel + 0.1, 2.5);
+            canvas.style.transform = `scale(${zoomLevel})`;
+        });
+        document.getElementById('zoom-minus').addEventListener('click', () => {
+            zoomLevel = Math.max(zoomLevel - 0.1, 1.0);
+            canvas.style.transform = `scale(${zoomLevel})`;
         });
 
-        canvas.addEventListener('pointermove', (e) => {
-            if (appState !== 'ADJUST_MARTYR' || activeCornerIndex === null) return;
-            let pos = getTouchPos(e);
-            corners[activeCornerIndex].x = pos.x;
-            corners[activeCornerIndex].y = pos.y;
-        });
-
-        canvas.addEventListener('pointerup', () => { activeCornerIndex = null; });
-        canvas.addEventListener('pointercancel', () => { activeCornerIndex = null; });
-
-        // Gestion des boutons d'action selon l'état
         btnAction.addEventListener('click', () => {
             if (appState === 'CAPTURE_MARTYR') {
-                // Figer l'image martyr
                 let tempCanvas = document.createElement('canvas');
                 tempCanvas.width = canvas.width;
                 tempCanvas.height = canvas.height;
@@ -237,20 +291,21 @@
                 martyrImage.src = tempCanvas.toDataURL();
                 martyrImage.onload = () => {
                     appState = 'ADJUST_MARTYR';
-                    statusMsg.innerText = "Étape 2 : Glissez les 4 coins sur votre étalon réel, puis validez";
+                    statusMsg.innerText = "Ajustez les coins (Croix & Échelle), puis validez";
                     btnAction.innerText = "✅ Valider l'étalonnage";
+                    controlPanel.style.display = 'flex';
                 };
             } else if (appState === 'ADJUST_MARTYR') {
-                // Verrouiller l'étalonnage et passer en production
                 appState = 'PRODUCTION';
-                statusMsg.innerText = "🎯 Mode Production actif (Calage verrouillé)";
+                statusMsg.innerText = "🎯 Mode Production actif - Axe X & Échelle verrouillés";
                 btnAction.style.display = 'none';
+                controlPanel.style.display = 'none';
+                canvas.style.transform = 'scale(1)'; // Reset zoom visuel pour la production
                 btnLeft.style.display = 'block';
                 btnRight.style.display = 'block';
             }
         });
 
-        // Fonction de capture définitive en mode production
         let lastCapturedWithLayers = null;
         let lastCapturedOriginal = null;
 
@@ -268,7 +323,6 @@
             let layerCtx = layerCanvas.getContext('2d');
             layerCtx.drawImage(origCanvas, 0, 0);
 
-            // Redessiner l'axe rouge et le cadre calibré sur la photo finale
             let midLeftY = (corners[0].y + corners[3].y) / 2;
             let midRightY = (corners[1].y + corners[2].y) / 2;
             layerCtx.strokeStyle = 'red';
