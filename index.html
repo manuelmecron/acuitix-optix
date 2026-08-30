@@ -3,133 +3,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - ETALON11</title>
+    <title>Acuitix Optix - Détection Auto</title>
+    <script async src="opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
-        #camera-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-        #videoElement { width: 100%; height: 100%; object-fit: cover; }
+        #container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        
+        /* Vidéo masquée mais utilisée pour le traitement */
+        #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
+        
+        /* Canvas d'affichage avec les dessins par-dessus */
+        #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Conteneur géométrique aux proportions exactes du plan (170x100) */
-        #gabarit-cadre {
-            position: absolute;
-            width: 85vw;
-            max-width: 650px;
-            aspect-ratio: 170 / 100;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-        }
-
-        /* Axe X rouge pile au milieu (hauteur 50%) */
-        #axe-x {
-            position: absolute; top: 50%; left: 0; width: 100%; height: 2px;
-            background: red; transform: translateY(-50%);
-        }
-
-        /* Les 4 coins proportionnels aux carrés de 15x15 mm sur une base de 170x100 mm */
-        .corner {
-            position: absolute;
-            width: calc(15 / 170 * 100%);
-            height: calc(15 / 100 * 100%);
-            border-color: yellow; border-style: solid;
-        }
-        #corner-tl { top: 0; left: 0; border-width: 4px 0 0 4px; }
-        #corner-tr { top: 0; right: 0; border-width: 4px 4px 0 0; }
-        #corner-bl { bottom: 0; left: 0; border-width: 0 0 4px 4px; }
-        #corner-br { bottom: 0; right: 0; border-width: 0 4px 4px 0; }
-
-        /* Bouton de capture */
-        #capture-btn {
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            background: #28a745; color: white; border: none; padding: 14px 28px;
-            border-radius: 30px; font-size: 18px; font-weight: bold; cursor: pointer; z-index: 10;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
-        }
-
-        /* Message d'alerte si le téléphone est en mode portrait */
-        #landscape-warning {
+        /* Message de statut */
+        #status { position: absolute; top: 10px; left: 10px; color: yellow; background: rgba(0,0,0,0.5); padding: 5px; font-family: monospace; font-size: 12px; z-index: 100; }
+        
+        /* Message d'alerte si pas de détection */
+        #alert-box {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.9); color: white; z-index: 1000;
+            background: rgba(0, 0, 0, 0.85); color: #ff4444; z-index: 200;
             display: none; flex-direction: column; align-items: center; justify-content: center;
-            text-align: center; padding: 20px; font-size: 20px;
+            text-align: center; padding: 20px; font-size: 20px; font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <div id="landscape-warning">
-        📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b><br><span style="font-size: 14px; color: #aaa; margin-top: 10px;">Le gabarit ETALON11 nécessite une prise de vue horizontale.</span>
+    <div id="alert-box">
+        ⚠️ GABARIT NON DÉTECTÉ ⚠️<br><br>
+        <span style="font-size: 16px; color: white; font-weight: normal;">
+            Assurez-vous que le gabarit est bien visible et en mode paysage.
+        </span>
     </div>
 
-    <div id="camera-container">
-        <video id="videoElement" autoplay playsinline muted></video>
-        
-        <div id="gabarit-cadre">
-            <div id="axe-x"></div>
-            <div class="corner" id="corner-tl"></div>
-            <div class="corner" id="corner-tr"></div>
-            <div class="corner" id="corner-bl"></div>
-            <div class="corner" id="corner-br"></div>
-        </div>
-
-        <button id="capture-btn">📸 Capturer</button>
+    <div id="container">
+        <div id="status">OpenCV is loading...</div>
+        <video id="videoInput" autoplay playsinline muted></video>
+        <canvas id="canvasOutput"></canvas>
     </div>
-
-    <canvas id="canvas" style="display:none;"></canvas>
 
     <script>
-        const video = document.getElementById('videoElement');
-        const captureBtn = document.getElementById('capture-btn');
-        const canvas = document.getElementById('canvas');
-        const warningScreen = document.getElementById('landscape-warning');
+        let video = document.getElementById('videoInput');
+        let canvasOutput = document.getElementById('canvasOutput');
+        let canvasContext = canvasOutput.getContext('2d');
+        let status = document.getElementById('status');
+        let alertBox = document.getElementById('alert-box');
 
-        function checkOrientation() {
-            if (window.innerHeight > window.innerWidth) {
-                warningScreen.style.display = 'flex';
-            } else {
-                warningScreen.style.display = 'none';
-            }
-        }
+        let streaming = false;
+        let src, gray, blurred, thresh, contours, hierarchy;
 
-        window.addEventListener('resize', checkOrientation);
-        window.addEventListener('orientationchange', checkOrientation);
-        checkOrientation();
-
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { exact: 'environment' } },
-                    audio: false
-                });
-                video.srcObject = stream;
-            } catch (err) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'environment' },
-                        audio: false
-                    });
+        // Initialisation d'OpenCV
+        function onOpenCvReady() {
+            status.innerText = 'OpenCV ready. Starting camera...';
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+                .then(function(stream) {
                     video.srcObject = stream;
-                } catch (e) {
-                    alert("Impossible d'accéder à la caméra : " + e.message);
+                    video.play();
+                    status.innerText = 'Camera started. Detecting...';
+                    startProcessing();
+                })
+                .catch(function(err) {
+                    status.innerText = "Erreur caméra : " + err.message;
+                });
+        }
+
+        // Boucle de traitement d'image
+        function startProcessing() {
+            streaming = true;
+            
+            // Dimensions du canvas correspondant à la vidéo
+            video.onloadedmetadata = () => {
+                canvasOutput.width = video.videoWidth;
+                canvasOutput.height = video.videoHeight;
+            };
+
+            // Création des matrices OpenCV
+            src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+            gray = new cv.Mat();
+            blurred = new cv.Mat();
+            thresh = new cv.Mat();
+            contours = new cv.MatVector();
+            hierarchy = new cv.Mat();
+
+            let cap = new cv.VideoCapture(video);
+            
+            function processVideo() {
+                if (!streaming) return;
+                
+                try {
+                    cap.read(src);
+                    
+                    // 1. Conversion en niveaux de gris
+                    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                    
+                    // 2. Flou pour réduire le bruit
+                    cv.GaussianBlur(gray, blurred, {width: 5, height: 5}, 0);
+                    
+                    // 3. Binarisation (Seuillage d'Otsu pour s'adapter à la luminosité)
+                    cv.threshold(blurred, thresh, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
+
+                    // 4. Recherche des contours
+                    cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                    let largestContour = null;
+                    let maxArea = 0;
+
+                    // 5. Filtrer pour trouver le plus grand contour qui est un quadrilatère
+                    for (let i = 0; i < contours.size(); ++i) {
+                        let cnt = contours.get(i);
+                        let area = cv.contourArea(cnt);
+                        
+                        // Seuil de taille minimale (ignorer les petits points parasites)
+                        if (area > (canvasOutput.width * canvasOutput.height) * 0.1) {
+                            let perimeter = cv.arcLength(cnt, true);
+                            let approx = new cv.Mat();
+                            // Approximation du contour pour trouver les sommets
+                            cv.approxPolyDP(cnt, approx, 0.02 * perimeter, true);
+                            
+                            // Si c'est un quadrilatère et le plus grand trouvé
+                            if (approx.rows === 4 && area > maxArea) {
+                                maxArea = area;
+                                largestContour = approx;
+                            } else {
+                                approx.delete(); // Libérer la mémoire si non retenu
+                            }
+                        }
+                    }
+
+                    // Dessiner le résultat
+                    // D'abord, afficher le flux vidéo brut sur le canvas
+                    canvasContext.drawImage(video, 0, 0, canvasOutput.width, canvasOutput.height);
+
+                    if (largestContour) {
+                        // Redessiner les repères par-dessus
+                        drawRepere(largestContour);
+                        alertBox.style.display = 'none'; // Cacher l'alerte
+                        largestContour.delete();
+                    } else {
+                        // Aucun gabarit détecté
+                        alertBox.style.display = 'flex';
+                    }
+
+                } catch (err) {
+                    console.log(err);
                 }
+                
+                requestAnimationFrame(processVideo);
+            }
+
+            // Démarrer la boucle
+            processVideo();
+        }
+
+        // Fonction de dessin des repères sur le canvas
+        function drawRepere(contour) {
+            let points = [];
+            for (let i = 0; i < 4; i++) {
+                points.push({x: contour.data32S[i * 2], y: contour.data32S[i * 2 + 1]});
+            }
+
+            // Calculer le centre approximatif pour le texte (optionnel)
+            let centerX = (points[0].x + points[2].x) / 2;
+            let centerY = (points[0].y + points[2].y) / 2;
+
+            // Dessiner l'axe X rouge
+            canvasContext.beginPath();
+            canvasContext.moveTo(points[0].x, centerY);
+            canvasContext.lineTo(points[1].x, centerY);
+            canvasContext.strokeStyle = 'red';
+            canvasContext.lineWidth = 3;
+            canvasContext.stroke();
+
+            // Dessiner les coins jaunes
+            canvasContext.strokeStyle = 'yellow';
+            canvasContext.lineWidth = 5;
+            const cornerSize = 60; // Taille des L
+
+            points.forEach(p => {
+                // Coin Haut Gauche
+                drawCorner(p.x - cornerSize/2, p.y - cornerSize/2, cornerSize, cornerSize, 'tl');
+                // Coin Haut Droit
+                drawCorner(p.x + cornerSize/2, p.y - cornerSize/2, cornerSize, cornerSize, 'tr');
+                // Coin Bas Gauche
+                drawCorner(p.x - cornerSize/2, p.y + cornerSize/2, cornerSize, cornerSize, 'bl');
+                // Coin Bas Droit
+                drawCorner(p.x + cornerSize/2, p.y + cornerSize/2, cornerSize, cornerSize, 'br');
+            });
+            
+            // Fonction utilitaire pour dessiner les L des coins
+            function drawCorner(x, y, w, h, type) {
+                canvasContext.beginPath();
+                if(type === 'tl') {
+                    canvasContext.moveTo(x + w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y + h);
+                } else if (type === 'tr') {
+                    canvasContext.moveTo(x - w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y + h);
+                } else if (type === 'bl') {
+                    canvasContext.moveTo(x + w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y - h);
+                } else if (type === 'br') {
+                    canvasContext.moveTo(x - w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y - h);
+                }
+                canvasContext.stroke();
             }
         }
 
-        startCamera();
-
-        captureBtn.addEventListener('click', () => {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
-            const dataUrl = canvas.toDataURL('image/png');
-            let win = window.open();
-            win.document.write(`<h3 style="font-family:sans-serif; text-align:center;">ETALON11 - Capturé</h3><div style="text-align:center;"><img src="${dataUrl}" style="max-width:90%; border:2px solid black;"/></div>`);
-        });
     </script>
 </body>
 </html>
