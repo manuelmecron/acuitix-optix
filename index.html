@@ -3,19 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Détection Auto Paysage</title>
-    <script async src="opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
+    <title>Acuitix Optix - ETALON11NW</title>
+    <!-- Chargement d'OpenCV pour la reconnaissance automatique des contours -->
+    <script async src="https://docs.opencv.org/4.5.0/opencv.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
-        #container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        #app-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
         #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
         #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
 
-        #status { position: absolute; top: 10px; left: 10px; color: yellow; background: rgba(0,0,0,0.5); padding: 5px; font-family: monospace; font-size: 12px; z-index: 100; }
-        
-        /* Message d'alerte mode portrait */
+        /* 2.a Axe X rouge continu de part en part */
+        .red-axis {
+            position: absolute; top: 50%; left: 0; width: 100%; height: 2px;
+            background: red; transform: translateY(-50%); pointer-events: none; z-index: 10;
+        }
+
+        /* 3. Boutons de capture ergonomiques pour les pouces (gauche et droite) */
+        .capture-btn {
+            position: absolute; bottom: 20px; background: #28a745; color: white; border: none;
+            padding: 15px 25px; border-radius: 30px; font-size: 16px; font-weight: bold;
+            cursor: pointer; z-index: 20; box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+        }
+        #btn-left { left: 30px; }
+        #btn-right { right: 30px; }
+
+        /* 1. Alerte paysagère obligatoire */
         #landscape-warning {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.95); color: white; z-index: 2000;
@@ -23,41 +37,63 @@
             text-align: center; padding: 20px; font-size: 20px;
         }
 
-        /* Message d'alerte si le gabarit n'est pas détecté */
-        #alert-box {
-            position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
-            background: rgba(255, 0, 0, 0.8); color: white; padding: 8px 16px;
-            border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 150; display: none;
+        /* 4 & 5. Interface de prévisualisation et options d'export */
+        #preview-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.92); z-index: 3000; display: none;
+            flex-direction: column; align-items: center; justify-content: center; padding: 10px;
         }
+        #preview-canvas { max-width: 90vw; max-height: 65vh; border: 2px solid white; object-fit: contain; }
+        .modal-actions { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        .modal-actions button {
+            padding: 10px 16px; background: #007bff; color: white; border: none; border-radius: 6px;
+            font-size: 14px; cursor: pointer; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+        }
+        .modal-actions button.secondary { background: #6c757d; }
     </style>
 </head>
 <body>
 
+    <!-- 1. Écran de verrouillage mode portrait -->
     <div id="landscape-warning">
         📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b><br>
-        <span style="font-size: 14px; color: #aaa; margin-top: 10px;">L'ETALON11 nécessite une prise de vue horizontale.</span>
+        <span style="font-size: 14px; color: #aaa; margin-top: 10px;">L'application nécessite une prise de vue horizontale.</span>
     </div>
 
-    <div id="alert-box">⚠️ Gabarit non détecté</div>
+    <!-- 4 & 5. Modale de prévisualisation et export -->
+    <div id="preview-modal">
+        <canvas id="preview-canvas"></canvas>
+        <div class="modal-actions">
+            <button id="dl-with-layers">💾 Télécharger avec calques</button>
+            <button id="dl-original" class="secondary">📥 Télécharger originale</button>
+            <button id="share-btn" class="secondary">📤 Partager</button>
+            <button id="close-preview" style="background: #dc3545;">❌ Fermer</button>
+        </div>
+    </div>
 
-    <div id="container">
-        <div id="status">Chargement d'OpenCV...</div>
+    <!-- Interface principale caméra -->
+    <div id="app-container">
         <video id="videoInput" autoplay playsinline muted></video>
         <canvas id="canvasOutput"></canvas>
+        <div class="red-axis"></div>
+        
+        <button class="capture-btn" id="btn-left">📸 Capturer</button>
+        <button class="capture-btn" id="btn-right">📸 Capturer</button>
     </div>
 
     <script>
         let video = document.getElementById('videoInput');
         let canvasOutput = document.getElementById('canvasOutput');
-        let canvasContext = canvasOutput.getContext('2d');
-        let status = document.getElementById('status');
-        let alertBox = document.getElementById('alert-box');
+        let ctx = canvasOutput.getContext('2d');
         let warningScreen = document.getElementById('landscape-warning');
+        let previewModal = document.getElementById('preview-modal');
+        let previewCanvas = document.getElementById('preview-canvas');
+        let previewCtx = previewCanvas.getContext('2d');
 
         let streaming = false;
-        let src, gray, blurred, thresh, contours, hierarchy;
+        let detectedCorners = null;
 
-        // Vérification de l'orientation en temps réel
+        // 1. Contrôle strict de l'orientation
         function checkOrientation() {
             if (window.innerHeight > window.innerWidth) {
                 warningScreen.style.display = 'flex';
@@ -69,114 +105,189 @@
         window.addEventListener('orientationchange', checkOrientation);
         checkOrientation();
 
-        function onOpenCvReady() {
-            status.innerText = 'OpenCV prêt. Démarrage caméra...';
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-                .then(function(stream) {
-                    video.srcObject = stream;
-                    video.play();
-                    status.innerText = 'Recherche du gabarit...';
-                    startProcessing();
-                })
-                .catch(function(err) {
-                    status.innerText = "Erreur caméra : " + err.message;
-                });
-        }
+        // Initialisation de la caméra arrière
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+            .then(stream => {
+                video.srcObject = stream;
+                video.play();
+                streaming = true;
+                requestAnimationFrame(processFrame);
+            })
+            .catch(err => alert("Erreur d'accès à la caméra : " + err.message));
 
-        function startProcessing() {
-            streaming = true;
-            
-            video.onloadedmetadata = () => {
+        let src, gray, blurred, thresh, contours, hierarchy;
+        function initOpenCVObjects() {
+            if (typeof cv !== 'undefined' && cv.Mat) {
+                src = new cv.Mat();
+                gray = new cv.Mat();
+                blurred = new cv.Mat();
+                thresh = new cv.Mat();
+                contours = new cv.MatVector();
+                hierarchy = new cv.Mat();
+            } else {
+                setTimeout(initOpenCVObjects, 500);
+            }
+        }
+        setTimeout(initOpenCVObjects, 1000);
+
+        // 2.b Traitement vidéo en direct et reconnaissance automatique des 4 coins ETALON11NW
+        function processFrame() {
+            if (!streaming) return;
+
+            if (video.videoWidth > 0 && canvasOutput.width !== video.videoWidth) {
                 canvasOutput.width = video.videoWidth;
                 canvasOutput.height = video.videoHeight;
-            };
+            }
 
-            src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-            gray = new cv.Mat();
-            blurred = new cv.Mat();
-            thresh = new cv.Mat();
-            contours = new cv.MatVector();
-            hierarchy = new cv.Mat();
+            ctx.drawImage(video, 0, 0, canvasOutput.width, canvasOutput.height);
 
-            let cap = new cv.VideoCapture(video);
-            
-            function processVideo() {
-                if (!streaming) return;
-                
+            if (typeof cv !== 'undefined' && src && video.videoWidth > 0) {
                 try {
+                    let cap = new cv.VideoCapture(video);
                     cap.read(src);
-                    
+
                     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
                     cv.GaussianBlur(gray, blurred, {width: 5, height: 5}, 0);
                     cv.threshold(blurred, thresh, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
                     cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-                    let largestContour = null;
                     let maxArea = 0;
+                    let bestContour = null;
 
                     for (let i = 0; i < contours.size(); ++i) {
                         let cnt = contours.get(i);
                         let area = cv.contourArea(cnt);
-                        
                         if (area > (canvasOutput.width * canvasOutput.height) * 0.1) {
                             let perimeter = cv.arcLength(cnt, true);
                             let approx = new cv.Mat();
                             cv.approxPolyDP(cnt, approx, 0.02 * perimeter, true);
-                            
                             if (approx.rows === 4 && area > maxArea) {
                                 maxArea = area;
-                                largestContour = approx;
+                                if (bestContour) bestContour.delete();
+                                bestContour = approx;
                             } else {
                                 approx.delete();
                             }
                         }
                     }
 
-                    canvasContext.drawImage(video, 0, 0, canvasOutput.width, canvasOutput.height);
-
-                    if (largestContour) {
-                        drawRepere(largestContour);
-                        alertBox.style.display = 'none';
-                        largestContour.delete();
+                    if (bestContour) {
+                        detectedCorners = [];
+                        for (let i = 0; i < 4; i++) {
+                            detectedCorners.push({
+                                x: bestContour.data32S[i * 2],
+                                y: bestContour.data32S[i * 2 + 1]
+                            });
+                        }
+                        drawLiveCorners(detectedCorners);
+                        bestContour.delete();
                     } else {
-                        alertBox.style.display = 'block';
+                        detectedCorners = null;
                     }
-
-                } catch (err) {
-                    console.log(err);
+                } catch (e) {
+                    console.error(e);
                 }
-                
-                requestAnimationFrame(processVideo);
             }
 
-            processVideo();
+            requestAnimationFrame(processFrame);
         }
 
-        function drawRepere(contour) {
-            let points = [];
-            for (let i = 0; i < 4; i++) {
-                points.push({x: contour.data32S[i * 2], y: contour.data32S[i * 2 + 1]});
-            }
-
-            let centerY = (points[0].y + points[2].y) / 2;
-
-            // Axe X rouge
-            canvasContext.beginPath();
-            canvasContext.moveTo(points[0].x, centerY);
-            canvasContext.lineTo(points[1].x, centerY);
-            canvasContext.strokeStyle = 'red';
-            canvasContext.lineWidth = 3;
-            canvasContext.stroke();
-
-            // Coins jaunes proportionnels
-            canvasContext.strokeStyle = 'yellow';
-            canvasContext.lineWidth = 5;
-            const cornerSize = 50;
-
-            points.forEach(p => {
-                canvasContext.strokeRect(p.x - cornerSize/2, p.y - cornerSize/2, cornerSize, cornerSize);
+        function drawLiveCorners(corners) {
+            ctx.strokeStyle = 'yellow';
+            ctx.lineWidth = 5;
+            const size = 50;
+            corners.forEach(p => {
+                ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
             });
         }
+
+        // 3. Déclenchement de la photo (depuis le bouton gauche ou droit)
+        let lastCapturedWithLayers = null;
+        let lastCapturedOriginal = null;
+
+        function handleCapture() {
+            // A. Génération de l'image originale (sans calques)
+            let origCanvas = document.createElement('canvas');
+            origCanvas.width = video.videoWidth;
+            origCanvas.height = video.videoHeight;
+            let origCtx = origCanvas.getContext('2d');
+            origCtx.drawImage(video, 0, 0);
+            lastCapturedOriginal = origCanvas.toDataURL('image/png');
+
+            // B. Génération de l'image avec calques incrustés (4 & 5)
+            let layerCanvas = document.createElement('canvas');
+            layerCanvas.width = video.videoWidth;
+            layerCanvas.height = video.videoHeight;
+            let layerCtx = layerCanvas.getContext('2d');
+            layerCtx.drawImage(origCanvas, 0, 0);
+
+            // Dessin de l'axe X rouge continu
+            layerCtx.strokeStyle = 'red';
+            layerCtx.lineWidth = 4;
+            layerCtx.beginPath();
+            layerCtx.moveTo(0, layerCanvas.height / 2);
+            layerCtx.lineTo(layerCanvas.width, layerCanvas.height / 2);
+            layerCtx.stroke();
+
+            // Dessin des 4 coins (automatiques ou de secours centrés)
+            layerCtx.strokeStyle = 'yellow';
+            layerCtx.lineWidth = 6;
+            if (detectedCorners && detectedCorners.length === 4) {
+                detectedCorners.forEach(p => {
+                    layerCtx.strokeRect(p.x - 30, p.y - 30, 60, 60);
+                });
+            } else {
+                let w = layerCanvas.width * 0.6;
+                let h = layerCanvas.height * 0.6;
+                let x = (layerCanvas.width - w) / 2;
+                let y = (layerCanvas.height - h) / 2;
+                layerCtx.strokeRect(x, y, w, h);
+            }
+
+            lastCapturedWithLayers = layerCanvas.toDataURL('image/png');
+
+            // Affichage dans la modale de prévisualisation
+            previewCanvas.width = layerCanvas.width;
+            previewCanvas.height = layerCanvas.height;
+            previewCtx.drawImage(layerCanvas, 0, 0);
+            previewModal.style.display = 'flex';
+        }
+
+        document.getElementById('btn-left').addEventListener('click', handleCapture);
+        document.getElementById('btn-right').addEventListener('click', handleCapture);
+        document.getElementById('close-preview').addEventListener('click', () => previewModal.style.display = 'none');
+
+        // 5. Options d'export (Téléchargement avec/sans calques et Partage)
+        document.getElementById('dl-with-layers').addEventListener('click', () => {
+            let link = document.createElement('a');
+            link.download = 'etalon11nw_avec_calques.png';
+            link.href = lastCapturedWithLayers;
+            link.click();
+        });
+
+        document.getElementById('dl-original').addEventListener('click', () => {
+            let link = document.createElement('a');
+            link.download = 'etalon11nw_originale.png';
+            link.href = lastCapturedOriginal;
+            link.click();
+        });
+
+        document.getElementById('share-btn').addEventListener('click', async () => {
+            if (navigator.share) {
+                try {
+                    let blob = await (await fetch(lastCapturedWithLayers)).blob();
+                    let file = new File([blob], "etalon11nw.png", { type: "image/png" });
+                    await navigator.share({
+                        title: 'Acuitix Optix - Capture',
+                        files: [file]
+                    });
+                } catch (err) {
+                    console.log("Partage annulé ou interrompu");
+                }
+            } else {
+                alert("Le partage natif n'est pas pris en charge par votre navigateur.");
+            }
+        });
     </script>
 </body>
 </html>
