@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Acuitix Optix - Visée en direct</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
+
+        #camera-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        #videoElement { width: 100%; height: 100%; object-fit: cover; }
+
+        /* Superposition des guides visuels */
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        /* Axe X rouge au milieu */
+        #axe-x { position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: red; transform: translateY(-50%); }
+
+        /* Les 4 coins du gabarit */
+        .corner {
+            position: absolute; width: 40px; height: 40px; border-color: yellow; border-style: solid;
+        }
+        #corner-tl { top: 35%; left: 20%; border-width: 3px 0 0 3px; }
+        #corner-tr { top: 35%; right: 20%; border-width: 3px 3px 0 0; }
+        #corner-bl { bottom: 35%; left: 20%; border-width: 0 0 3px 3px; }
+        #corner-br { bottom: 35%; right: 20%; border-width: 0 3px 3px 0; }
+
+        /* Bouton de capture */
+        #capture-btn {
+            position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+            background: #28a745; color: white; border: none; padding: 16px 32px;
+            border-radius: 30px; font-size: 18px; font-weight: bold; cursor: pointer; z-index: 10;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="camera-container">
+        <video id="videoElement" autoplay playsinline muted></video>
+        
+        <div id="overlay">
+            <div id="axe-x"></div>
+            <div class="corner" id="corner-tl"></div>
+            <div class="corner" id="corner-tr"></div>
+            <div class="corner" id="corner-bl"></div>
+            <div class="corner" id="corner-br"></div>
+        </div>
+
+        <button id="capture-btn">📸 Capturer</button>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('videoElement');
+        const captureBtn = document.getElementById('capture-btn');
+        const canvas = document.getElementById('canvas');
+
+        // Démarrer la caméra arrière en direct
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                alert("Erreur caméra : " + err.message + "\nAssurez-vous d'utiliser une connexion HTTPS ou un serveur local.");
+            }
+        }
+
+        startCamera();
+
+        // Capture de l'image avec les repères incrustés
+        captureBtn.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const dataUrl = canvas.toDataURL('image/png');
+            let win = window.open();
+            win.document.write(`<h3 style="font-family:sans-serif; text-align:center;">Photo avec visée</h3><div style="text-align:center;"><img src="${dataUrl}" style="max-width:90%; border:2px solid black;"/></div>`);
+        });
+    </script>
+</body>
+</html>
