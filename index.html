@@ -3,43 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Acuitix Optix - Détection Auto</title>
+    <title>Acuitix Optix - Détection Auto Paysage</title>
     <script async src="opencv.js" onload="onOpenCvReady();" type="text/javascript"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; }
 
         #container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-        
-        /* Vidéo masquée mais utilisée pour le traitement */
         #videoInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
-        
-        /* Canvas d'affichage avec les dessins par-dessus */
         #canvasOutput { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Message de statut */
         #status { position: absolute; top: 10px; left: 10px; color: yellow; background: rgba(0,0,0,0.5); padding: 5px; font-family: monospace; font-size: 12px; z-index: 100; }
         
-        /* Message d'alerte si pas de détection */
-        #alert-box {
+        /* Message d'alerte mode portrait */
+        #landscape-warning {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.85); color: #ff4444; z-index: 200;
+            background: rgba(0, 0, 0, 0.95); color: white; z-index: 2000;
             display: none; flex-direction: column; align-items: center; justify-content: center;
-            text-align: center; padding: 20px; font-size: 20px; font-weight: bold;
+            text-align: center; padding: 20px; font-size: 20px;
+        }
+
+        /* Message d'alerte si le gabarit n'est pas détecté */
+        #alert-box {
+            position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 0, 0, 0.8); color: white; padding: 8px 16px;
+            border-radius: 20px; font-size: 14px; font-weight: bold; z-index: 150; display: none;
         }
     </style>
 </head>
 <body>
 
-    <div id="alert-box">
-        ⚠️ GABARIT NON DÉTECTÉ ⚠️<br><br>
-        <span style="font-size: 16px; color: white; font-weight: normal;">
-            Assurez-vous que le gabarit est bien visible et en mode paysage.
-        </span>
+    <div id="landscape-warning">
+        📱<br><br><b>Veuillez tourner votre téléphone en mode paysage</b><br>
+        <span style="font-size: 14px; color: #aaa; margin-top: 10px;">L'ETALON11 nécessite une prise de vue horizontale.</span>
     </div>
 
+    <div id="alert-box">⚠️ Gabarit non détecté</div>
+
     <div id="container">
-        <div id="status">OpenCV is loading...</div>
+        <div id="status">Chargement d'OpenCV...</div>
         <video id="videoInput" autoplay playsinline muted></video>
         <canvas id="canvasOutput"></canvas>
     </div>
@@ -50,18 +52,30 @@
         let canvasContext = canvasOutput.getContext('2d');
         let status = document.getElementById('status');
         let alertBox = document.getElementById('alert-box');
+        let warningScreen = document.getElementById('landscape-warning');
 
         let streaming = false;
         let src, gray, blurred, thresh, contours, hierarchy;
 
-        // Initialisation d'OpenCV
+        // Vérification de l'orientation en temps réel
+        function checkOrientation() {
+            if (window.innerHeight > window.innerWidth) {
+                warningScreen.style.display = 'flex';
+            } else {
+                warningScreen.style.display = 'none';
+            }
+        }
+        window.addEventListener('resize', checkOrientation);
+        window.addEventListener('orientationchange', checkOrientation);
+        checkOrientation();
+
         function onOpenCvReady() {
-            status.innerText = 'OpenCV ready. Starting camera...';
+            status.innerText = 'OpenCV prêt. Démarrage caméra...';
             navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
                 .then(function(stream) {
                     video.srcObject = stream;
                     video.play();
-                    status.innerText = 'Camera started. Detecting...';
+                    status.innerText = 'Recherche du gabarit...';
                     startProcessing();
                 })
                 .catch(function(err) {
@@ -69,17 +83,14 @@
                 });
         }
 
-        // Boucle de traitement d'image
         function startProcessing() {
             streaming = true;
             
-            // Dimensions du canvas correspondant à la vidéo
             video.onloadedmetadata = () => {
                 canvasOutput.width = video.videoWidth;
                 canvasOutput.height = video.videoHeight;
             };
 
-            // Création des matrices OpenCV
             src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
             gray = new cv.Mat();
             blurred = new cv.Mat();
@@ -95,55 +106,40 @@
                 try {
                     cap.read(src);
                     
-                    // 1. Conversion en niveaux de gris
                     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-                    
-                    // 2. Flou pour réduire le bruit
                     cv.GaussianBlur(gray, blurred, {width: 5, height: 5}, 0);
-                    
-                    // 3. Binarisation (Seuillage d'Otsu pour s'adapter à la luminosité)
                     cv.threshold(blurred, thresh, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU);
-
-                    // 4. Recherche des contours
                     cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
                     let largestContour = null;
                     let maxArea = 0;
 
-                    // 5. Filtrer pour trouver le plus grand contour qui est un quadrilatère
                     for (let i = 0; i < contours.size(); ++i) {
                         let cnt = contours.get(i);
                         let area = cv.contourArea(cnt);
                         
-                        // Seuil de taille minimale (ignorer les petits points parasites)
                         if (area > (canvasOutput.width * canvasOutput.height) * 0.1) {
                             let perimeter = cv.arcLength(cnt, true);
                             let approx = new cv.Mat();
-                            // Approximation du contour pour trouver les sommets
                             cv.approxPolyDP(cnt, approx, 0.02 * perimeter, true);
                             
-                            // Si c'est un quadrilatère et le plus grand trouvé
                             if (approx.rows === 4 && area > maxArea) {
                                 maxArea = area;
                                 largestContour = approx;
                             } else {
-                                approx.delete(); // Libérer la mémoire si non retenu
+                                approx.delete();
                             }
                         }
                     }
 
-                    // Dessiner le résultat
-                    // D'abord, afficher le flux vidéo brut sur le canvas
                     canvasContext.drawImage(video, 0, 0, canvasOutput.width, canvasOutput.height);
 
                     if (largestContour) {
-                        // Redessiner les repères par-dessus
                         drawRepere(largestContour);
-                        alertBox.style.display = 'none'; // Cacher l'alerte
+                        alertBox.style.display = 'none';
                         largestContour.delete();
                     } else {
-                        // Aucun gabarit détecté
-                        alertBox.style.display = 'flex';
+                        alertBox.style.display = 'block';
                     }
 
                 } catch (err) {
@@ -153,22 +149,18 @@
                 requestAnimationFrame(processVideo);
             }
 
-            // Démarrer la boucle
             processVideo();
         }
 
-        // Fonction de dessin des repères sur le canvas
         function drawRepere(contour) {
             let points = [];
             for (let i = 0; i < 4; i++) {
                 points.push({x: contour.data32S[i * 2], y: contour.data32S[i * 2 + 1]});
             }
 
-            // Calculer le centre approximatif pour le texte (optionnel)
-            let centerX = (points[0].x + points[2].x) / 2;
             let centerY = (points[0].y + points[2].y) / 2;
 
-            // Dessiner l'axe X rouge
+            // Axe X rouge
             canvasContext.beginPath();
             canvasContext.moveTo(points[0].x, centerY);
             canvasContext.lineTo(points[1].x, centerY);
@@ -176,38 +168,15 @@
             canvasContext.lineWidth = 3;
             canvasContext.stroke();
 
-            // Dessiner les coins jaunes
+            // Coins jaunes proportionnels
             canvasContext.strokeStyle = 'yellow';
             canvasContext.lineWidth = 5;
-            const cornerSize = 60; // Taille des L
+            const cornerSize = 50;
 
             points.forEach(p => {
-                // Coin Haut Gauche
-                drawCorner(p.x - cornerSize/2, p.y - cornerSize/2, cornerSize, cornerSize, 'tl');
-                // Coin Haut Droit
-                drawCorner(p.x + cornerSize/2, p.y - cornerSize/2, cornerSize, cornerSize, 'tr');
-                // Coin Bas Gauche
-                drawCorner(p.x - cornerSize/2, p.y + cornerSize/2, cornerSize, cornerSize, 'bl');
-                // Coin Bas Droit
-                drawCorner(p.x + cornerSize/2, p.y + cornerSize/2, cornerSize, cornerSize, 'br');
+                canvasContext.strokeRect(p.x - cornerSize/2, p.y - cornerSize/2, cornerSize, cornerSize);
             });
-            
-            // Fonction utilitaire pour dessiner les L des coins
-            function drawCorner(x, y, w, h, type) {
-                canvasContext.beginPath();
-                if(type === 'tl') {
-                    canvasContext.moveTo(x + w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y + h);
-                } else if (type === 'tr') {
-                    canvasContext.moveTo(x - w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y + h);
-                } else if (type === 'bl') {
-                    canvasContext.moveTo(x + w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y - h);
-                } else if (type === 'br') {
-                    canvasContext.moveTo(x - w, y); canvasContext.moveTo(x, y); canvasContext.lineTo(x, y - h);
-                }
-                canvasContext.stroke();
-            }
         }
-
     </script>
 </body>
 </html>
