@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AcuiScan V1</title>
+    <title>AcuiScan V1 - Guidé par l'Utilisateur</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; color: #fff; }
@@ -19,29 +19,21 @@
             #orientation-warning { display: flex; }
         }
 
-        #camera-container { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        #camera-container { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; cursor: crosshair; }
         #webcam { width: 100%; height: 100%; object-fit: cover; }
         
-        .red-axis-line {
-            position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: red; transform: translateY(-50%); pointer-events: none; z-index: 10;
-        }
-
-        #status-hud {
+        #instruction-banner {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8); padding: 8px 16px; border-radius: 20px;
-            font-size: 0.9rem; color: #ffeb3b; z-index: 15; border: 1px solid #444;
+            background: rgba(0, 0, 0, 0.85); padding: 10px 20px; border-radius: 25px;
+            font-size: 1rem; color: #ffeb3b; z-index: 25; border: 2px solid #ffeb3b; text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
 
-        .capture-btn {
-            position: absolute; top: 50%; transform: translateY(-50%);
-            width: 75px; height: 75px; border-radius: 50%; background: rgba(255, 255, 255, 0.85);
-            border: 4px solid #fff; display: flex; justify-content: center; align-items: center;
-            cursor: pointer; z-index: 20; box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+        .click-dot {
+            position: absolute; width: 24px; height: 24px; border: 3px solid #ffeb3b; background: rgba(255, 235, 59, 0.4);
+            border-radius: 50%; transform: translate(-50%, -50%); z-index: 20; pointer-events: none;
+            display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: #000;
         }
-        .capture-btn:active { background: rgba(200, 200, 200, 0.95); transform: translateY(-50%) scale(0.95); }
-        .capture-btn.left { left: 35px; }
-        .capture-btn.right { right: 35px; }
-        .capture-icon { font-size: 32px; }
 
         .preview-canvas { max-width: 85%; max-height: 65vh; object-fit: contain; border: 2px solid #444; border-radius: 4px; }
         .toolbar { margin-top: 15px; display: flex; gap: 15px; z-index: 30; flex-wrap: wrap; justify-content: center; }
@@ -56,22 +48,20 @@
 
     <div id="orientation-warning">Veuillez tourner votre appareil en mode paysage pour utiliser AcuiScan V1.</div>
 
-    <!-- VUE 1 : Caméra et Visée -->
+    <!-- VUE 1 : Caméra et Visée Interactive 1 par 1 -->
     <div id="view-camera" class="view active">
-        <div id="camera-container">
+        <div id="camera-container" onclick="handleScreenClick(event)">
             <video id="webcam" autoplay playsinline muted></video>
-            <div class="red-axis-line"></div>
-            <div id="status-hud">Initialisation de la caméra...</div>
-            <div class="capture-btn left" onclick="triggerCaptureManuelle()"><span class="capture-icon">📷</span></div>
-            <div class="capture-btn right" onclick="triggerCaptureManuelle()"><span class="capture-icon">📷</span></div>
+            <div id="instruction-banner">Étape 1/4 : Touchez le centre du Marqueur 0 (Haut-Gauche)</div>
+            <div id="dots-container"></div>
         </div>
     </div>
 
-    <!-- VUE 2 : Validation avec Cadre Jaune -->
+    <!-- VUE 2 : Validation avec Cadre Jaune & Axe Rouge -->
     <div id="view-review" class="view" style="background: #121212;">
         <canvas id="review-canvas" class="preview-canvas"></canvas>
         <div class="toolbar">
-            <button class="btn btn-secondary" onclick="resetApp()">Reprendre une photo</button>
+            <button class="btn btn-secondary" onclick="resetApp()">Recommencer le pointage</button>
             <button class="btn btn-primary" onclick="validatePhoto()">Validé</button>
         </div>
     </div>
@@ -95,31 +85,35 @@
 
     <canvas id="hidden-canvas" style="display:none;"></canvas>
 
-    <script src="https://cdn.jsdelivr.net/gh/jcmellado/js-aruco@master/src/cv.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/jcmellado/js-aruco@master/src/aruco.js"></script>
-
     <script>
         const video = document.getElementById('webcam');
         const hiddenCanvas = document.getElementById('hidden-canvas');
         const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
         const reviewCanvas = document.getElementById('review-canvas');
         const reviewCtx = reviewCanvas.getContext('2d');
-        const statusHud = document.getElementById('status-hud');
+        const instructionBanner = document.getElementById('instruction-banner');
+        const dotsContainer = document.getElementById('dots-container');
+        const container = document.getElementById('camera-container');
 
         const ETALON_WIDTH_MM = 170.0;
         const ETALON_HEIGHT_MM = 100.0;
 
-        let isProcessing = false;
-        let stabilityCounter = 0;
-        let detectionInterval = null;
+        let currentStep = 0; // 0: ID0, 1: ID1, 2: ID3, 3: ID2 (Ordre visuel: HG, HD, BD, BG)
+        let clickedPoints = [];
+        const markerNames = [
+            "0 (Haut-Gauche)",
+            "1 (Haut-Droite)",
+            "3 (Bas-Droite)",
+            "2 (Bas-Gauche)"
+        ];
 
         async function initCamera() {
             try {
                 const constraints = {
                     video: {
                         facingMode: "environment",
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
                     }
                 };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -128,110 +122,72 @@
                 if (screen.orientation && screen.orientation.lock) {
                     screen.orientation.lock('landscape').catch(() => {});
                 }
-
-                video.onloadedmetadata = () => {
-                    video.play();
-                    startRealtimeDetection();
-                };
             } catch (err) {
                 console.error("Erreur caméra :", err);
-                statusHud.innerText = "Erreur d'accès à la caméra";
+                alert("Impossible d'accéder à la caméra arrière.");
             }
         }
 
-        function getMarkerCenter(corners) {
-            let x = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
-            let y = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4;
-            return { x, y };
-        }
+        function handleScreenClick(e) {
+            if (currentStep >= 4) return;
 
-        function startRealtimeDetection() {
-            if (detectionInterval) clearInterval(detectionInterval);
+            const rect = container.getBoundingClientRect();
+            const clientX = e.clientX - rect.left;
+            const clientY = e.clientY - rect.top;
 
-            detectionInterval = setInterval(() => {
-                if (isProcessing || video.paused || video.ended || !video.videoWidth) return;
-
-                // Synchronisation stricte des dimensions réelles du flux vidéo
-                hiddenCanvas.width = video.videoWidth;
-                hiddenCanvas.height = video.videoHeight;
-                hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-
-                let imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-                
-                try {
-                    let detector = new AR.Detector();
-                    let markers = detector.detect(imageData);
-
-                    let detectedCount = 0;
-                    let foundIDs = {};
-                    markers.forEach(m => {
-                        if (m.id >= 0 && m.id <= 3) {
-                            foundIDs[m.id] = getMarkerCenter(m.corners);
-                            detectedCount++;
-                        }
-                    });
-
-                    if (detectedCount === 4) {
-                        stabilityCounter++;
-                        statusHud.innerText = `🎯 4/4 Marqueurs détectés (${stabilityCounter}/4) - Capture...`;
-                        statusHud.style.color = "#4CAF50";
-
-                        if (stabilityCounter >= 4) {
-                            clearInterval(detectionInterval);
-                            executeCapture(foundIDs);
-                        }
-                    } else {
-                        stabilityCounter = 0;
-                        statusHud.innerText = `🔍 Recherche des marqueurs (${detectedCount}/4 détectés)...`;
-                        statusHud.style.color = "#ffeb3b";
-                    }
-                } catch (e) {
-                    // Ignore les erreurs de frame isolées
-                }
-            }, 200);
-        }
-
-        function triggerCaptureManuelle() {
-            if (isProcessing) return;
-            if (detectionInterval) clearInterval(detectionInterval);
-
+            // Conversion des coordonnées écran vers la résolution native de la vidéo
             hiddenCanvas.width = video.videoWidth || 1280;
             hiddenCanvas.height = video.videoHeight || 720;
-            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
 
-            let imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-            let detector = new AR.Detector();
-            let markers = detector.detect(imageData);
+            const scaleX = hiddenCanvas.width / rect.width;
+            const scaleY = hiddenCanvas.height / rect.height;
 
-            let detected = { 0: null, 1: null, 2: null, 3: null };
-            markers.forEach(m => {
-                if (m.id >= 0 && m.id <= 3) {
-                    detected[m.id] = getMarkerCenter(m.corners);
-                }
-            });
+            const nativeX = clientX * scaleX;
+            const nativeY = clientY * scaleY;
 
-            executeCapture(detected);
+            clickedPoints.push({ x: nativeX, y: nativeY });
+
+            // Affichage visuel du point cliqué à l'écran
+            const dot = document.createElement('div');
+            dot.className = 'click-dot';
+            dot.style.left = `${clientX}px`;
+            dot.style.top = `${clientY}px`;
+            dot.innerText = currentStep;
+            dotsContainer.appendChild(dot);
+
+            currentStep++;
+
+            if (currentStep < 4) {
+                instructionBanner.innerText = `Étape ${currentStep + 1}/4 : Touchez le centre du Marqueur ${markerNames[currentStep]}`;
+            } else {
+                instructionBanner.innerText = "🎯 Visée validée ! Génération de l'image...";
+                setTimeout(executeCaptureAndProcess, 400);
+            }
         }
 
-        function executeCapture(detected) {
-            isProcessing = true;
+        function executeCaptureAndProcess() {
+            // Capture immédiate de l'image de la caméra
+            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
             let originalDataUrl = hiddenCanvas.toDataURL('image/png');
 
-            let c0 = detected[0] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.20 };
-            let c1 = detected[1] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.20 };
-            let c2 = detected[2] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.80 };
-            let c3 = detected[3] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.80 };
+            let c0 = clickedPoints[0]; // Haut-Gauche
+            let c1 = clickedPoints[1]; // Haut-Droite
+            let c3 = clickedPoints[2]; // Bas-Droite
+            let c2 = clickedPoints[3]; // Bas-Gauche
 
+            // Calcul du ratio Pixel / mm basé sur le pointage réel
             let pixelWidth = Math.hypot(c1.x - c0.x, c1.y - c0.y);
             let pixelHeight = Math.hypot(c2.y - c0.y, c2.x - c0.x);
             let ratioX = ETALON_WIDTH_MM / pixelWidth;
             let ratioY = ETALON_HEIGHT_MM / pixelHeight;
             let precisionFactor = Number(((ratioX + ratioY) / 2).toFixed(4));
 
+            // Rendu sur le canvas de révision
             reviewCanvas.width = hiddenCanvas.width;
             reviewCanvas.height = hiddenCanvas.height;
             reviewCtx.drawImage(hiddenCanvas, 0, 0);
 
+            // Tracé du Cadre Jaune exact basé sur les points utilisateur
             reviewCtx.strokeStyle = "#FFEB3B";
             reviewCtx.lineWidth = 5;
             reviewCtx.beginPath();
@@ -242,6 +198,7 @@
             reviewCtx.closePath();
             reviewCtx.stroke();
 
+            // Tracé de l'Axe Rouge horizontal au milieu de l'image
             reviewCtx.strokeStyle = "#F44336";
             reviewCtx.lineWidth = 3;
             reviewCtx.beginPath();
@@ -277,10 +234,11 @@
         }
 
         function resetApp() {
-            isProcessing = false;
-            stabilityCounter = 0;
+            currentStep = 0;
+            clickedPoints = [];
+            dotsContainer.innerHTML = '';
+            instructionBanner.innerText = `Étape 1/4 : Touchez le centre du Marqueur ${markerNames[0]}`;
             switchView('view-camera');
-            startRealtimeDetection();
         }
 
         function switchView(viewId) {
