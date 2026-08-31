@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AcuiScan V1 - Guidé par l'Utilisateur</title>
+    <title>AcuiScan V1 - Workflow Séquentiel</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; color: #fff; }
@@ -19,20 +19,19 @@
             #orientation-warning { display: flex; }
         }
 
-        #camera-container { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; cursor: crosshair; }
+        #camera-container { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; }
         #webcam { width: 100%; height: 100%; object-fit: cover; }
         
-        #instruction-banner {
+        .red-axis-line {
+            position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: red; transform: translateY(-50%); pointer-events: none; z-index: 10; display: none;
+        }
+        .red-axis-line.active { display: block; }
+
+        #status-hud {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.85); padding: 10px 20px; border-radius: 25px;
-            font-size: 1rem; color: #ffeb3b; z-index: 25; border: 2px solid #ffeb3b; text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        }
-
-        .click-dot {
-            position: absolute; width: 24px; height: 24px; border: 3px solid #ffeb3b; background: rgba(255, 235, 59, 0.4);
-            border-radius: 50%; transform: translate(-50%, -50%); z-index: 20; pointer-events: none;
-            display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; color: #000;
+            font-size: 0.95rem; color: #ffeb3b; z-index: 25; border: 2px solid #ffeb3b; text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); max-width: 90%;
         }
 
         .preview-canvas { max-width: 85%; max-height: 65vh; object-fit: contain; border: 2px solid #444; border-radius: 4px; }
@@ -48,20 +47,20 @@
 
     <div id="orientation-warning">Veuillez tourner votre appareil en mode paysage pour utiliser AcuiScan V1.</div>
 
-    <!-- VUE 1 : Caméra et Visée Interactive 1 par 1 -->
+    <!-- VUE 1 : Caméra et Séquencement intelligent -->
     <div id="view-camera" class="view active">
-        <div id="camera-container" onclick="handleScreenClick(event)">
+        <div id="camera-container">
             <video id="webcam" autoplay playsinline muted></video>
-            <div id="instruction-banner">Étape 1/4 : Touchez le centre du Marqueur 0 (Haut-Gauche)</div>
-            <div id="dots-container"></div>
+            <div id="status-hud" style="color: #ffeb3b;">Initialisation de la caméra...</div>
+            <div id="axis-line" class="red-axis-line"></div>
         </div>
     </div>
 
-    <!-- VUE 2 : Validation avec Cadre Jaune & Axe Rouge -->
+    <!-- VUE 2 : Validation avec Cadre Jaune -->
     <div id="view-review" class="view" style="background: #121212;">
         <canvas id="review-canvas" class="preview-canvas"></canvas>
         <div class="toolbar">
-            <button class="btn btn-secondary" onclick="resetApp()">Recommencer le pointage</button>
+            <button class="btn btn-secondary" onclick="resetApp()">Recommencer</button>
             <button class="btn btn-primary" onclick="validatePhoto()">Validé</button>
         </div>
     </div>
@@ -85,26 +84,32 @@
 
     <canvas id="hidden-canvas" style="display:none;"></canvas>
 
+    <script src="https://cdn.jsdelivr.net/gh/jcmellado/js-aruco@master/src/cv.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/jcmellado/js-aruco@master/src/aruco.js"></script>
+
     <script>
         const video = document.getElementById('webcam');
         const hiddenCanvas = document.getElementById('hidden-canvas');
         const hiddenCtx = hiddenCanvas.getContext('2d', { willReadFrequently: true });
         const reviewCanvas = document.getElementById('review-canvas');
         const reviewCtx = reviewCanvas.getContext('2d');
-        const instructionBanner = document.getElementById('instruction-banner');
-        const dotsContainer = document.getElementById('dots-container');
-        const container = document.getElementById('camera-container');
+        const statusHud = document.getElementById('status-hud');
+        const axisLine = document.getElementById('axis-line');
 
         const ETALON_WIDTH_MM = 170.0;
         const ETALON_HEIGHT_MM = 100.0;
 
-        let currentStep = 0; // 0: ID0, 1: ID1, 2: ID3, 3: ID2 (Ordre visuel: HG, HD, BD, BG)
-        let clickedPoints = [];
-        const markerNames = [
-            "0 (Haut-Gauche)",
-            "1 (Haut-Droite)",
-            "3 (Bas-Droite)",
-            "2 (Bas-Gauche)"
+        let currentStage = 0; // 0: ID 0, 1: ID 1, 2: ID 3, 3: ID 2, 4: Overview
+        let capturedMarkers = {};
+        let stabilityCounter = 0;
+        let detectionInterval = null;
+        let originalSnapshotUrl = "";
+
+        const stageConfig = [
+            { id: 0, name: "Marqueur 0 (Haut-Gauche)" },
+            { id: 1, name: "Marqueur 1 (Haut-Droite)" },
+            { id: 3, name: "Marqueur 3 (Bas-Droite)" },
+            { id: 2, name: "Marqueur 2 (Bas-Gauche)" }
         ];
 
         async function initCamera() {
@@ -122,72 +127,121 @@
                 if (screen.orientation && screen.orientation.lock) {
                     screen.orientation.lock('landscape').catch(() => {});
                 }
+
+                video.onloadedmetadata = () => {
+                    video.play();
+                    startEngine();
+                };
             } catch (err) {
                 console.error("Erreur caméra :", err);
-                alert("Impossible d'accéder à la caméra arrière.");
+                statusHud.innerText = "Erreur d'accès à la caméra arrière.";
             }
         }
 
-        function handleScreenClick(e) {
-            if (currentStep >= 4) return;
-
-            const rect = container.getBoundingClientRect();
-            const clientX = e.clientX - rect.left;
-            const clientY = e.clientY - rect.top;
-
-            // Conversion des coordonnées écran vers la résolution native de la vidéo
-            hiddenCanvas.width = video.videoWidth || 1280;
-            hiddenCanvas.height = video.videoHeight || 720;
-
-            const scaleX = hiddenCanvas.width / rect.width;
-            const scaleY = hiddenCanvas.height / rect.height;
-
-            const nativeX = clientX * scaleX;
-            const nativeY = clientY * scaleY;
-
-            clickedPoints.push({ x: nativeX, y: nativeY });
-
-            // Affichage visuel du point cliqué à l'écran
-            const dot = document.createElement('div');
-            dot.className = 'click-dot';
-            dot.style.left = `${clientX}px`;
-            dot.style.top = `${clientY}px`;
-            dot.innerText = currentStep;
-            dotsContainer.appendChild(dot);
-
-            currentStep++;
-
-            if (currentStep < 4) {
-                instructionBanner.innerText = `Étape ${currentStep + 1}/4 : Touchez le centre du Marqueur ${markerNames[currentStep]}`;
-            } else {
-                instructionBanner.innerText = "🎯 Visée validée ! Génération de l'image...";
-                setTimeout(executeCaptureAndProcess, 400);
-            }
+        function getMarkerCenter(corners) {
+            let x = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
+            let y = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4;
+            return { x, y };
         }
 
-        function executeCaptureAndProcess() {
-            // Capture immédiate de l'image de la caméra
-            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-            let originalDataUrl = hiddenCanvas.toDataURL('image/png');
+        function startEngine() {
+            if (detectionInterval) clearInterval(detectionInterval);
 
-            let c0 = clickedPoints[0]; // Haut-Gauche
-            let c1 = clickedPoints[1]; // Haut-Droite
-            let c3 = clickedPoints[2]; // Bas-Droite
-            let c2 = clickedPoints[3]; // Bas-Gauche
+            detectionInterval = setInterval(() => {
+                if (video.paused || video.ended || !video.videoWidth) return;
 
-            // Calcul du ratio Pixel / mm basé sur le pointage réel
+                hiddenCanvas.width = video.videoWidth;
+                hiddenCanvas.height = video.videoHeight;
+                hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+
+                let imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+                
+                try {
+                    let detector = new AR.Detector();
+                    let markers = detector.detect(imageData);
+
+                    if (currentStage < 4) {
+                        // ETAPES 1 à 4 : Capture de près un par un
+                        let targetId = stageConfig[currentStage].id;
+                        let targetName = stageConfig[currentStage].name;
+                        let found = markers.find(m => m.id === targetId);
+
+                        if (found) {
+                            stabilityCounter++;
+                            statusHud.innerText = `✅ ${targetName} détecté (${stabilityCounter}/3)`;
+                            statusHud.style.color = "#4CAF50";
+
+                            if (stabilityCounter >= 3) {
+                                capturedMarkers[targetId] = getMarkerCenter(found.corners);
+                                currentStage++;
+                                stabilityCounter = 0;
+
+                                if (currentStage < 4) {
+                                    statusHud.innerText = `🎯 Parfait ! Visez maintenant le ${stageConfig[currentStage].name}`;
+                                    statusHud.style.color = "#ffeb3b";
+                                } else {
+                                    // Passage à la vue d'ensemble
+                                    axisLine.classList.add('active');
+                                    statusHud.innerText = "🎉 4/4 repérés ! Écartez la vue pour la photo globale...";
+                                    statusHud.style.color = "#2196F3";
+                                }
+                            }
+                        } else {
+                            stabilityCounter = 0;
+                            statusHud.innerText = `🔍 Rapprochez-vous du ${targetName}...`;
+                            statusHud.style.color = "#ffeb3b";
+                        }
+                    } else {
+                        // ETAPE 5 : Vue d'ensemble - Vérification des 4 marqueurs simultanément
+                        let detectedCount = 0;
+                        let currentFound = {};
+                        markers.forEach(m => {
+                            if ([0, 1, 2, 3].includes(m.id)) {
+                                currentFound[m.id] = getMarkerCenter(m.corners);
+                                detectedCount++;
+                            }
+                        });
+
+                        if (detectedCount === 4) {
+                            stabilityCounter++;
+                            statusHud.innerText = `📸 Vue d'ensemble stable (${stabilityCounter}/4) - Capture...`;
+                            statusHud.style.color = "#4CAF50";
+
+                            if (stabilityCounter >= 4) {
+                                clearInterval(detectionInterval);
+                                finalizeOverviewCapture(currentFound);
+                            }
+                        } else {
+                            stabilityCounter = 0;
+                            statusHud.innerText = `📐 Reculez et alignez l'axe rouge (${detectedCount}/4 visibles)`;
+                            statusHud.style.color = "#ffeb3b";
+                        }
+                    }
+                } catch (e) {
+                    // Ignore les erreurs de frame isolées
+                }
+            }, 250);
+        }
+
+        function finalizeOverviewCapture(detectedMap) {
+            originalSnapshotUrl = hiddenCanvas.toDataURL('image/png');
+
+            let c0 = detectedMap[0];
+            let c1 = detectedMap[1];
+            let c2 = detectedMap[2];
+            let c3 = detectedMap[3];
+
             let pixelWidth = Math.hypot(c1.x - c0.x, c1.y - c0.y);
             let pixelHeight = Math.hypot(c2.y - c0.y, c2.x - c0.x);
             let ratioX = ETALON_WIDTH_MM / pixelWidth;
             let ratioY = ETALON_HEIGHT_MM / pixelHeight;
             let precisionFactor = Number(((ratioX + ratioY) / 2).toFixed(4));
 
-            // Rendu sur le canvas de révision
             reviewCanvas.width = hiddenCanvas.width;
             reviewCanvas.height = hiddenCanvas.height;
             reviewCtx.drawImage(hiddenCanvas, 0, 0);
 
-            // Tracé du Cadre Jaune exact basé sur les points utilisateur
+            // Tracé du cadre jaune
             reviewCtx.strokeStyle = "#FFEB3B";
             reviewCtx.lineWidth = 5;
             reviewCtx.beginPath();
@@ -198,7 +252,7 @@
             reviewCtx.closePath();
             reviewCtx.stroke();
 
-            // Tracé de l'Axe Rouge horizontal au milieu de l'image
+            // Tracé de l'axe rouge horizontal
             reviewCtx.strokeStyle = "#F44336";
             reviewCtx.lineWidth = 3;
             reviewCtx.beginPath();
@@ -222,7 +276,7 @@
             };
 
             document.getElementById('dl-traced').href = processedDataUrl;
-            document.getElementById('dl-original').href = originalDataUrl;
+            document.getElementById('dl-original').href = originalSnapshotUrl;
             document.getElementById('dl-json').href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportJSON, null, 4));
             document.getElementById('precision-text').innerText = `Étalonnage validé (Précision : ${precisionFactor} mm/pixel)`;
 
@@ -234,11 +288,14 @@
         }
 
         function resetApp() {
-            currentStep = 0;
-            clickedPoints = [];
-            dotsContainer.innerHTML = '';
-            instructionBanner.innerText = `Étape 1/4 : Touchez le centre du Marqueur ${markerNames[0]}`;
+            currentStage = 0;
+            capturedMarkers = {};
+            stabilityCounter = 0;
+            axisLine.classList.remove('active');
+            statusHud.innerText = `🔍 Rapprochez-vous du ${stageConfig[0].name}`;
+            statusHud.style.color = "#ffeb3b";
             switchView('view-camera');
+            startEngine();
         }
 
         function switchView(viewId) {
