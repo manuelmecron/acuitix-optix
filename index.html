@@ -28,7 +28,7 @@
 
         #status-hud {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7); padding: 8px 16px; border-radius: 20px;
+            background: rgba(0, 0, 0, 0.8); padding: 8px 16px; border-radius: 20px;
             font-size: 0.9rem; color: #ffeb3b; z-index: 15; border: 1px solid #444;
         }
 
@@ -61,7 +61,7 @@
         <div id="camera-container">
             <video id="webcam" autoplay playsinline muted></video>
             <div class="red-axis-line"></div>
-            <div id="status-hud">Recherche des 4 marqueurs ArUco...</div>
+            <div id="status-hud">Initialisation de la caméra...</div>
             <div class="capture-btn left" onclick="triggerCaptureManuelle()"><span class="capture-icon">📷</span></div>
             <div class="capture-btn right" onclick="triggerCaptureManuelle()"><span class="capture-icon">📷</span></div>
         </div>
@@ -118,9 +118,8 @@
                 const constraints = {
                     video: {
                         facingMode: "environment",
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        zoom: 1.0
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     }
                 };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -130,13 +129,13 @@
                     screen.orientation.lock('landscape').catch(() => {});
                 }
 
-                // Démarrage de la boucle de détection temps réel pour l'auto-déclenchement
-                video.onplaying = () => {
+                video.onloadedmetadata = () => {
+                    video.play();
                     startRealtimeDetection();
                 };
             } catch (err) {
-                console.error("Erreur d'accès à la caméra :", err);
-                alert("Impossible d'accéder à la caméra arrière en mode paysage.");
+                console.error("Erreur caméra :", err);
+                statusHud.innerText = "Erreur d'accès à la caméra";
             }
         }
 
@@ -146,15 +145,15 @@
             return { x, y };
         }
 
-        // Boucle de détection continue en arrière-plan pour le déclenchement automatique
         function startRealtimeDetection() {
             if (detectionInterval) clearInterval(detectionInterval);
 
             detectionInterval = setInterval(() => {
-                if (isProcessing || video.paused || video.ended) return;
+                if (isProcessing || video.paused || video.ended || !video.videoWidth) return;
 
-                hiddenCanvas.width = video.videoWidth || 1280;
-                hiddenCanvas.height = video.videoHeight || 720;
+                // Synchronisation stricte des dimensions réelles du flux vidéo
+                hiddenCanvas.width = video.videoWidth;
+                hiddenCanvas.height = video.videoHeight;
                 hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
 
                 let imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
@@ -174,11 +173,10 @@
 
                     if (detectedCount === 4) {
                         stabilityCounter++;
-                        statusHud.innerText = `🎯 Alignement parfait (${stabilityCounter}/5) - Capture imminente...`;
+                        statusHud.innerText = `🎯 4/4 Marqueurs détectés (${stabilityCounter}/4) - Capture...`;
                         statusHud.style.color = "#4CAF50";
 
-                        // Si la visée est stable pendant ~0.7 seconde, déclenchement automatique !
-                        if (stabilityCounter >= 5) {
+                        if (stabilityCounter >= 4) {
                             clearInterval(detectionInterval);
                             executeCapture(foundIDs);
                         }
@@ -190,7 +188,7 @@
                 } catch (e) {
                     // Ignore les erreurs de frame isolées
                 }
-            }, 150);
+            }, 200);
         }
 
         function triggerCaptureManuelle() {
@@ -219,25 +217,21 @@
             isProcessing = true;
             let originalDataUrl = hiddenCanvas.toDataURL('image/png');
 
-            // Coordonnées de secours si un marqueur échoue sur la frame instantanée
-            let c0 = detected[0] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.20 }; // 0: HG
-            let c1 = detected[1] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.20 }; // 1: HD
-            let c2 = detected[2] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.80 }; // 2: BG
-            let c3 = detected[3] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.80 }; // 3: BD
+            let c0 = detected[0] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.20 };
+            let c1 = detected[1] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.20 };
+            let c2 = detected[2] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.80 };
+            let c3 = detected[3] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.80 };
 
-            // Calcul du ratio Pixel / mm (précis au 100ème)
             let pixelWidth = Math.hypot(c1.x - c0.x, c1.y - c0.y);
             let pixelHeight = Math.hypot(c2.y - c0.y, c2.x - c0.x);
             let ratioX = ETALON_WIDTH_MM / pixelWidth;
             let ratioY = ETALON_HEIGHT_MM / pixelHeight;
             let precisionFactor = Number(((ratioX + ratioY) / 2).toFixed(4));
 
-            // Rendu de l'image modifiée (Cadre Jaune + Axe X Rouge)
             reviewCanvas.width = hiddenCanvas.width;
             reviewCanvas.height = hiddenCanvas.height;
             reviewCtx.drawImage(hiddenCanvas, 0, 0);
 
-            // Traçage du Cadre Jaune (reliant HG -> HD -> BD -> BG)
             reviewCtx.strokeStyle = "#FFEB3B";
             reviewCtx.lineWidth = 5;
             reviewCtx.beginPath();
@@ -248,7 +242,6 @@
             reviewCtx.closePath();
             reviewCtx.stroke();
 
-            // Traçage du Viseur Axe X Rouge
             reviewCtx.strokeStyle = "#F44336";
             reviewCtx.lineWidth = 3;
             reviewCtx.beginPath();
@@ -258,7 +251,6 @@
 
             let processedDataUrl = reviewCanvas.toDataURL('image/png');
 
-            // Données JSON enrichies (inspirées du modèle CAO)
             let exportJSON = {
                 template: "ETALON11NW",
                 dimensions_mm: { width: ETALON_WIDTH_MM, height: ETALON_HEIGHT_MM },
