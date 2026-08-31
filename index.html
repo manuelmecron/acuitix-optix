@@ -8,11 +8,9 @@
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
         body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; color: #fff; }
 
-        /* Vues */
         .view { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; justify-content: center; align-items: center; }
         .view.active { display: flex; }
 
-        /* Avertissement Portrait */
         #orientation-warning {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; z-index: 9999;
             display: none; justify-content: center; align-items: center; text-align: center; padding: 20px; font-size: 1.2rem;
@@ -21,16 +19,13 @@
             #orientation-warning { display: flex; }
         }
 
-        /* Caméra & Interface Flux */
         #camera-container { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; }
         #webcam { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Viseur Axe X (Trait rouge continu) */
         .red-axis-line {
             position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: red; transform: translateY(-50%); pointer-events: none; z-index: 10;
         }
 
-        /* Boutons de capture latéraux */
         .capture-btn {
             position: absolute; top: 50%; transform: translateY(-50%);
             width: 70px; height: 70px; border-radius: 50%; background: rgba(255, 255, 255, 0.8);
@@ -42,7 +37,6 @@
         .capture-btn.right { right: 30px; }
         .capture-icon { font-size: 28px; }
 
-        /* Écrans de validation / export */
         .preview-canvas { max-width: 90%; max-height: 70vh; object-fit: contain; border: 2px solid #333; }
         .toolbar { margin-top: 15px; display: flex; gap: 15px; z-index: 30; }
         .btn { padding: 12px 25px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
@@ -77,6 +71,7 @@
     <!-- VUE 3 : Options d'Export -->
     <div id="view-export" class="view" style="background: #121212;">
         <h2>Traitement et Étalonnage Réussis (ETALON11NW)</h2>
+        <p id="status-svg" style="margin: 5px 0; color: #4CAF50; font-size: 0.9rem;"></p>
         <p style="margin: 10px 0; color: #aaa;">Précision de redressement : au 100ème de mm</p>
         <div class="toolbar">
             <button class="btn btn-secondary" onclick="resetApp()">Reprendre</button>
@@ -86,7 +81,6 @@
 
     <canvas id="hidden-canvas" style="display:none;"></canvas>
 
-    <!-- Inclusion de la bibliothèque de détection ArUco -->
     <script src="https://cdn.jsdelivr.net/gh/jcmellado/js-aruco@master/src/cv.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/jcmellado/js-aruco@master/src/aruco.js"></script>
 
@@ -100,26 +94,45 @@
         let originalImageDataUrl = null;
         let processedImageDataUrl = null;
         let exportJSONData = null;
+        let loadedSVGs = {};
 
-        // Dimensions réelles de l'étalon ETALON11NW en mm
         const ETALON_WIDTH_MM = 170.0;
         const ETALON_HEIGHT_MM = 100.0;
 
-        // 1. Initialisation de la caméra avec contraintes strictes (Paysage & Zoom X1)
+        // Chargement des SVG depuis le dossier assets/ (correspondant à ARUCO_0.svg, etc.)
+        async function loadReferenceSVGs() {
+            const ids = [0, 1, 2, 3];
+            for (let id of ids) {
+                try {
+                    let response = await fetch(`./assets/ARUCO_${id}.svg`);
+                    if (response.ok) {
+                        loadedSVGs[id] = await response.text();
+                    }
+                } catch (e) {
+                    console.warn(`Impossible de charger ARUCO_${id}.svg :`, e);
+                }
+            }
+            if (Object.keys(loadedSVGs).length > 0) {
+                document.getElementById('status-svg').innerText = `✅ ${Object.keys(loadedSVGs).length}/4 fichiers SVG de référence chargés.`;
+            } else {
+                document.getElementById('status-svg').innerText = `⚠️ Fichiers SVG non trouvés dans ./assets/`;
+            }
+        }
+
         async function initCamera() {
+            await loadReferenceSVGs();
             try {
                 const constraints = {
                     video: {
                         facingMode: "environment",
                         width: { ideal: 1920 },
                         height: { ideal: 1080 },
-                        zoom: 1.0 // Forçage du zoom à 1x si supporté par le matériel
+                        zoom: 1.0
                     }
                 };
                 const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 video.srcObject = stream;
                 
-                // Forçage de l'orientation paysage si l'API est disponible
                 if (screen.orientation && screen.orientation.lock) {
                     screen.orientation.lock('landscape').catch(() => {});
                 }
@@ -129,7 +142,6 @@
             }
         }
 
-        // 2 & 3. Capture, Détection ArUco et Redressement Géométrique Dynamique
         function capturePhoto() {
             hiddenCanvas.width = video.videoWidth || 1280;
             hiddenCanvas.height = video.videoHeight || 720;
@@ -138,16 +150,14 @@
 
             let imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
             
-            // Tentative de détection des 4 marqueurs ArUco (IDs: 0=HG, 1=HD, 2=BG, 3=BD)
             let markers = [];
             try {
                 let detector = new AR.Detector();
                 markers = detector.detect(imageData);
             } catch (e) {
-                console.warn("Module ArUco en cours de simulation / initialisation alternative :", e);
+                console.warn("Erreur ArUco detector :", e);
             }
 
-            // Cartographie ou simulation robuste des coins si détectés ou par défaut basés sur le cadre image
             let detectedMarkers = { 0: null, 1: null, 2: null, 3: null };
             markers.forEach(m => {
                 if (m.id >= 0 && m.id <= 3) {
@@ -155,25 +165,22 @@
                 }
             });
 
-            // Si les 4 marqueurs ne sont pas tous détectés, on prend par défaut une zone de référence calée sur l'image pour l'exemple
-            let c0 = detectedMarkers[0] ? detectedMarkers[0][0] : {x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.15}; // HG
-            let c1 = detectedMarkers[1] ? detectedMarkers[1][1] : {x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.15}; // HD
-            let c2 = detectedMarkers[2] ? detectedMarkers[2][3] : {x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.85}; // BG
-            let c3 = detectedMarkers[3] ? detectedMarkers[3][2] : {x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.85}; // BD
+            let c0 = detectedMarkers[0] ? detectedMarkers[0][0] : {x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.15};
+            let c1 = detectedMarkers[1] ? detectedMarkers[1][1] : {x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.15};
+            let c2 = detectedMarkers[2] ? detectedMarkers[2][3] : {x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.85};
+            let c3 = detectedMarkers[3] ? detectedMarkers[3][2] : {x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.85};
 
-            // Calcul du ratio Pixel / mm dynamique (précis au 100ème de mm)
             let pixelWidth = Math.hypot(c1.x - c0.x, c1.y - c0.y);
             let pixelHeight = Math.hypot(c2.y - c0.y, c2.x - c0.x);
             let ratioX = ETALON_WIDTH_MM / pixelWidth;
             let ratioY = ETALON_HEIGHT_MM / pixelHeight;
             let precisionFactor = Number(((ratioX + ratioY) / 2).toFixed(4));
 
-            // Préparation de l'affichage de révision (Canvas avec image + Cadre Jaune + Axe X Rouge)
             reviewCanvas.width = hiddenCanvas.width;
             reviewCanvas.height = hiddenCanvas.height;
             reviewCtx.drawImage(hiddenCanvas, 0, 0);
 
-            // Dessin du cadre jaune superposé (redressement dynamique trapèze)
+            // Cadre Jaune de redressement
             reviewCtx.strokeStyle = "yellow";
             reviewCtx.lineWidth = 4;
             reviewCtx.beginPath();
@@ -184,7 +191,7 @@
             reviewCtx.closePath();
             reviewCtx.stroke();
 
-            // Dessin du Viseur Axe X Rouge sur la photo capturée
+            // Axe X Rouge (Viseur d'alignement)
             reviewCtx.strokeStyle = "red";
             reviewCtx.lineWidth = 2;
             reviewCtx.beginPath();
@@ -194,11 +201,11 @@
 
             processedImageDataUrl = reviewCanvas.toDataURL('image/png');
 
-            // Stockage des coordonnées JSON
             exportJSONData = {
                 template: "ETALON11NW",
                 dimensions_mm: { width: ETALON_WIDTH_MM, height: ETALON_HEIGHT_MM },
                 calibration_precision_mm_per_pixel: precisionFactor,
+                svg_references_loaded: Object.keys(loadedSVGs),
                 markers_detected_corners: {
                     "0_haut_gauche": c0,
                     "1_haut_droit": c1,
@@ -211,7 +218,6 @@
             switchView('view-review');
         }
 
-        // 4. Gestion des choix utilisateur (Validation / Export)
         function validatePhoto() {
             switchView('view-export');
         }
@@ -228,21 +234,17 @@
             document.getElementById(viewId).classList.add('active');
         }
 
-        // Export des éléments (Photo avec traçage, photo originale, JSON)
         function exportData() {
-            // Téléchargement de la photo avec superposition (cadre jaune + axe X)
             let link1 = document.createElement('a');
             link1.download = 'AcuiScan_Traume_Superpose.png';
             link1.href = processedImageDataUrl;
             link1.click();
 
-            // Téléchargement de la photo originale
             let link2 = document.createElement('a');
             link2.download = 'AcuiScan_Originale.png';
             link2.href = originalImageDataUrl;
             link2.click();
 
-            // Téléchargement du fichier JSON de coordonnées
             let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportJSONData, null, 4));
             let link3 = document.createElement('a');
             link3.download = 'AcuiScan_Coordonnees.json';
@@ -250,7 +252,6 @@
             link3.click();
         }
 
-        // Démarrage de la caméra au chargement de la page
         window.addEventListener('load', initCamera);
     </script>
 </body>
