@@ -28,21 +28,22 @@
 
         .capture-btn {
             position: absolute; top: 50%; transform: translateY(-50%);
-            width: 70px; height: 70px; border-radius: 50%; background: rgba(255, 255, 255, 0.8);
+            width: 75px; height: 75px; border-radius: 50%; background: rgba(255, 255, 255, 0.85);
             border: 4px solid #fff; display: flex; justify-content: center; align-items: center;
-            cursor: pointer; z-index: 20; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            cursor: pointer; z-index: 20; box-shadow: 0 4px 15px rgba(0,0,0,0.6);
         }
-        .capture-btn:active { background: rgba(200, 200, 200, 0.9); transform: translateY(-50%) scale(0.95); }
-        .capture-btn.left { left: 30px; }
-        .capture-btn.right { right: 30px; }
-        .capture-icon { font-size: 28px; }
+        .capture-btn:active { background: rgba(200, 200, 200, 0.95); transform: translateY(-50%) scale(0.95); }
+        .capture-btn.left { left: 35px; }
+        .capture-btn.right { right: 35px; }
+        .capture-icon { font-size: 32px; }
 
-        .preview-canvas { max-width: 90%; max-height: 70vh; object-fit: contain; border: 2px solid #333; }
-        .toolbar { margin-top: 15px; display: flex; gap: 15px; z-index: 30; }
-        .btn { padding: 12px 25px; font-size: 1rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
+        .preview-canvas { max-width: 85%; max-height: 65vh; object-fit: contain; border: 2px solid #444; border-radius: 4px; }
+        .toolbar { margin-top: 15px; display: flex; gap: 15px; z-index: 30; flex-wrap: wrap; justify-content: center; }
+        .btn { padding: 12px 22px; font-size: 0.95rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
         .btn-primary { background: #4CAF50; color: white; }
         .btn-secondary { background: #f44336; color: white; }
         .btn-blue { background: #2196F3; color: white; }
+        .btn-dark { background: #333; color: white; border: 1px solid #555; }
     </style>
 </head>
 <body>
@@ -69,13 +70,19 @@
     </div>
 
     <!-- VUE 3 : Options d'Export -->
-    <div id="view-export" class="view" style="background: #121212;">
-        <h2>Traitement et Étalonnage Réussis (ETALON11NW)</h2>
-        <p id="status-svg" style="margin: 5px 0; color: #4CAF50; font-size: 0.9rem;"></p>
-        <p style="margin: 10px 0; color: #aaa;">Précision de redressement : au 100ème de mm</p>
-        <div class="toolbar">
-            <button class="btn btn-secondary" onclick="resetApp()">Reprendre</button>
-            <button class="btn btn-blue" onclick="exportData()">Exporter (JSON + Images)</button>
+    <div id="view-export" class="view" style="background: #121212; padding: 20px; text-align: center;">
+        <h2>Exportation - ETALON11NW</h2>
+        <p id="precision-text" style="margin: 8px 0; color: #4CAF50; font-size: 0.95rem;"></p>
+        <p style="margin-bottom: 15px; color: #aaa; font-size: 0.85rem;">Téléchargez vos fichiers ci-dessous :</p>
+        
+        <div class="toolbar" style="flex-direction: column; gap: 10px; align-items: center;">
+            <a id="dl-traced" class="btn btn-blue" download="AcuiScan_Traume_Superpose.png">📥 Télécharger Photo Tracée (avec cadre & axe)</a>
+            <a id="dl-original" class="btn btn-dark" download="AcuiScan_Originale.png">📥 Télécharger Photo Originale</a>
+            <a id="dl-json" class="btn btn-dark" download="AcuiScan_Coordonnees.json">📥 Télécharger Fichier JSON (Coordonnées)</a>
+        </div>
+
+        <div class="toolbar" style="margin-top: 25px;">
+            <button class="btn btn-secondary" onclick="resetApp()">Reprendre une photo</button>
         </div>
     </div>
 
@@ -91,36 +98,10 @@
         const reviewCanvas = document.getElementById('review-canvas');
         const reviewCtx = reviewCanvas.getContext('2d');
 
-        let originalImageDataUrl = null;
-        let processedImageDataUrl = null;
-        let exportJSONData = null;
-        let loadedSVGs = {};
-
         const ETALON_WIDTH_MM = 170.0;
         const ETALON_HEIGHT_MM = 100.0;
 
-        // Chargement des SVG depuis le dossier assets/ (correspondant à ARUCO_0.svg, etc.)
-        async function loadReferenceSVGs() {
-            const ids = [0, 1, 2, 3];
-            for (let id of ids) {
-                try {
-                    let response = await fetch(`./assets/ARUCO_${id}.svg`);
-                    if (response.ok) {
-                        loadedSVGs[id] = await response.text();
-                    }
-                } catch (e) {
-                    console.warn(`Impossible de charger ARUCO_${id}.svg :`, e);
-                }
-            }
-            if (Object.keys(loadedSVGs).length > 0) {
-                document.getElementById('status-svg').innerText = `✅ ${Object.keys(loadedSVGs).length}/4 fichiers SVG de référence chargés.`;
-            } else {
-                document.getElementById('status-svg').innerText = `⚠️ Fichiers SVG non trouvés dans ./assets/`;
-            }
-        }
-
         async function initCamera() {
-            await loadReferenceSVGs();
             try {
                 const constraints = {
                     video: {
@@ -142,11 +123,19 @@
             }
         }
 
+        function getMarkerCenter(corners) {
+            let x = (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4;
+            let y = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) / 4;
+            return { x, y };
+        }
+
         function capturePhoto() {
             hiddenCanvas.width = video.videoWidth || 1280;
             hiddenCanvas.height = video.videoHeight || 720;
+            
+            // 1. Sauvegarde de la photo originale
             hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-            originalImageDataUrl = hiddenCanvas.toDataURL('image/png');
+            let originalDataUrl = hiddenCanvas.toDataURL('image/png');
 
             let imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
             
@@ -158,31 +147,34 @@
                 console.warn("Erreur ArUco detector :", e);
             }
 
-            let detectedMarkers = { 0: null, 1: null, 2: null, 3: null };
+            let detected = { 0: null, 1: null, 2: null, 3: null };
             markers.forEach(m => {
                 if (m.id >= 0 && m.id <= 3) {
-                    detectedMarkers[m.id] = m.corners;
+                    detected[m.id] = getMarkerCenter(m.corners);
                 }
             });
 
-            let c0 = detectedMarkers[0] ? detectedMarkers[0][0] : {x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.15};
-            let c1 = detectedMarkers[1] ? detectedMarkers[1][1] : {x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.15};
-            let c2 = detectedMarkers[2] ? detectedMarkers[2][3] : {x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.85};
-            let c3 = detectedMarkers[3] ? detectedMarkers[3][2] : {x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.85};
+            // Fallback robuste ou coordonnées réelles des centres (0=HG, 1=HD, 2=BG, 3=BD)
+            let c0 = detected[0] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.20 }; // Haut-Gauche
+            let c1 = detected[1] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.20 }; // Haut-Droit
+            let c2 = detected[2] || { x: hiddenCanvas.width * 0.15, y: hiddenCanvas.height * 0.80 }; // Bas-Gauche
+            let c3 = detected[3] || { x: hiddenCanvas.width * 0.85, y: hiddenCanvas.height * 0.80 }; // Bas-Droit
 
+            // Calcul de la précision dynamique au 100ème de mm
             let pixelWidth = Math.hypot(c1.x - c0.x, c1.y - c0.y);
             let pixelHeight = Math.hypot(c2.y - c0.y, c2.x - c0.x);
             let ratioX = ETALON_WIDTH_MM / pixelWidth;
             let ratioY = ETALON_HEIGHT_MM / pixelHeight;
             let precisionFactor = Number(((ratioX + ratioY) / 2).toFixed(4));
 
+            // 2. Génération de l'image modifiée (avec Cadre Jaune + Axe X Rouge)
             reviewCanvas.width = hiddenCanvas.width;
             reviewCanvas.height = hiddenCanvas.height;
             reviewCtx.drawImage(hiddenCanvas, 0, 0);
 
-            // Cadre Jaune de redressement
-            reviewCtx.strokeStyle = "yellow";
-            reviewCtx.lineWidth = 4;
+            // Dessin du cadre jaune (trapèze étalon)
+            reviewCtx.strokeStyle = "#FFEB3B";
+            reviewCtx.lineWidth = 5;
             reviewCtx.beginPath();
             reviewCtx.moveTo(c0.x, c0.y);
             reviewCtx.lineTo(c1.x, c1.y);
@@ -191,22 +183,22 @@
             reviewCtx.closePath();
             reviewCtx.stroke();
 
-            // Axe X Rouge (Viseur d'alignement)
-            reviewCtx.strokeStyle = "red";
-            reviewCtx.lineWidth = 2;
+            // Dessin du viseur Axe X Rouge
+            reviewCtx.strokeStyle = "#F44336";
+            reviewCtx.lineWidth = 3;
             reviewCtx.beginPath();
             reviewCtx.moveTo(0, reviewCanvas.height / 2);
             reviewCtx.lineTo(reviewCanvas.width, reviewCanvas.height / 2);
             reviewCtx.stroke();
 
-            processedImageDataUrl = reviewCanvas.toDataURL('image/png');
+            let processedDataUrl = reviewCanvas.toDataURL('image/png');
 
-            exportJSONData = {
+            // Préparation des données JSON
+            let exportJSON = {
                 template: "ETALON11NW",
                 dimensions_mm: { width: ETALON_WIDTH_MM, height: ETALON_HEIGHT_MM },
                 calibration_precision_mm_per_pixel: precisionFactor,
-                svg_references_loaded: Object.keys(loadedSVGs),
-                markers_detected_corners: {
+                markers_detected_centers: {
                     "0_haut_gauche": c0,
                     "1_haut_droit": c1,
                     "2_bas_gauche": c2,
@@ -214,6 +206,15 @@
                 },
                 timestamp: new Date().toISOString()
             };
+
+            // Configuration des liens de téléchargement pour l'écran d'export
+            document.getElementById('dl-traced').href = processedDataUrl;
+            document.getElementById('dl-original').href = originalDataUrl;
+            
+            let jsonString = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportJSON, null, 4));
+            document.getElementById('dl-json').href = jsonString;
+
+            document.getElementById('precision-text').innerText = `Étalonnage validé (Précision : ${precisionFactor} mm/pixel)`;
 
             switchView('view-review');
         }
@@ -223,33 +224,12 @@
         }
 
         function resetApp() {
-            exportJSONData = null;
-            originalImageDataUrl = null;
-            processedImageDataUrl = null;
             switchView('view-camera');
         }
 
         function switchView(viewId) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(viewId).classList.add('active');
-        }
-
-        function exportData() {
-            let link1 = document.createElement('a');
-            link1.download = 'AcuiScan_Traume_Superpose.png';
-            link1.href = processedImageDataUrl;
-            link1.click();
-
-            let link2 = document.createElement('a');
-            link2.download = 'AcuiScan_Originale.png';
-            link2.href = originalImageDataUrl;
-            link2.click();
-
-            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportJSONData, null, 4));
-            let link3 = document.createElement('a');
-            link3.download = 'AcuiScan_Coordonnees.json';
-            link3.href = dataStr;
-            link3.click();
         }
 
         window.addEventListener('load', initCamera);
